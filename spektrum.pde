@@ -291,13 +291,14 @@ void setupStartControls() {
     .setBarHeight(20)
     .setItemHeight(20)
     .setPosition(x, y)
-    .setSize(width, 20 + (devices.length * 30));
+    .setSize(width, 20 + ((devices.length +1) * 30));  // TAG_HACKRF
 
   deviceDropdown.getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Select device");
-
-  for (int i=0; i<devices.length; i++) {
-    deviceDropdown.addItem(devices[i], i);
+  int i;
+  for (i=0; i<devices.length; i++) {
+     deviceDropdown.addItem(devices[i], i);
   }
+  deviceDropdown.addItem("Hack RF", i+1); // TAG_HACKRF
 
   scaledBuffer =  new DataPoint[0];
 }
