@@ -1,3 +1,18 @@
+import org.bridj.*;
+import org.bridj.ann.*;
+import org.bridj.cpp.*;
+import org.bridj.cpp.com.*;
+import org.bridj.cpp.com.shell.*;
+import org.bridj.cpp.mfc.*;
+import org.bridj.cpp.std.*;
+import org.bridj.demangling.*;
+import org.bridj.dyncall.*;
+import org.bridj.func.*;
+import org.bridj.jawt.*;
+import org.bridj.util.*;
+import org.bridj.relocated.org.objectweb.asm.*;
+import org.bridj.relocated.org.objectweb.asm.signature.*;
+
 import controlP5.*;
 import rtlspektrum.Rtlspektrum;
 import java.io.FileWriter;
@@ -1396,9 +1411,9 @@ public void gainDropdown(int theValue) {
 
 void setup() {
   size(1200, 750);  // Size should be the first statement
-  if (frame != null) {
+  // if (frame != null) {
     surface.setResizable(true);
-  }
+  // }
 
   devices = Rtlspektrum.getDevices();
   for (String dev : devices) {
