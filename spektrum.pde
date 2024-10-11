@@ -298,7 +298,7 @@ void setupStartControls() {
   for (i=0; i<devices.length; i++) {
      deviceDropdown.addItem(devices[i], i);
   }
-  deviceDropdown.addItem("Hack RF", i+1); // TAG_HACKRF
+  deviceDropdown.addItem("Hack RF", 99); // TAG_HACKRF
 
   scaledBuffer =  new DataPoint[0];
 }
@@ -1378,32 +1378,41 @@ public void toggleRelMode(int theValue) {
 
 public void deviceDropdown(int theValue) {
   deviceDropdown.hide();
-  spektrumReader = new Rtlspektrum(theValue);
-  int status = spektrumReader.openDevice();
-
-  // Initialiaze configuration class array
-  //
-  for (int i=0; i<nrOfConfigurations; i++) {
-    configSet[i] = new  configurationClass(i+1);
+  
+  if ( theValue <98 ) {
+    spektrumReader = new Rtlspektrum(theValue);
+    int status = spektrumReader.openDevice();
+  
+    // Initialiaze configuration class array
+    //
+    for (int i=0; i<nrOfConfigurations; i++) {
+      configSet[i] = new  configurationClass(i+1);
+    }
+  
+    //============ Function calls added by Dave N
+    makeConfig();  // create config file if it is not found.
+    loadConfig();
+    //============================
+  
+    if (status < 0) {
+      MsgBox("Can't open rtl-sdr device.", "Spektrum");
+      exit();
+      return;
+    }
+  
+    gains = spektrumReader.getGains();
+  
+    setupControls();
+    relMode = 0;
+  
+    setupDone = true;
   }
-
-  //============ Function calls added by Dave N
-  makeConfig();  // create config file if it is not found.
-  loadConfig();
-  //============================
-
-  if (status < 0) {
-    MsgBox("Can't open rtl-sdr device.", "Spektrum");
-    exit();
-    return;
+  else    // 99 is HackRF 
+  {
+    
   }
-
-  gains = spektrumReader.getGains();
-
-  setupControls();
-  relMode = 0;
-
-  setupDone = true;
+  
+  
 }
 
 public void gainDropdown(int theValue) {
