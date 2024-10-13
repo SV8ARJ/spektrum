@@ -752,3 +752,53 @@ void setupControls() {
   // Tab 'global' is a tab that lies on top of any
   // other tab and is always visible
 }
+
+void setupStartControls() {
+  int x, y;
+  int width = 170;
+
+  x = 15;
+  y = 40;
+
+  deviceDropdown = cp5.addListBox("deviceDropdown")
+    .setBarHeight(20)
+    .setItemHeight(20)
+    .setPosition(x, y)
+    .setSize(width, 20 + ((glb_devices.length) * 30));  // TAG_HACKRF
+
+  deviceDropdown.getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Select device");
+  
+
+  
+  y+=200;
+  // Create a Textarea for multi-line text display
+  infoTextbox = cp5.addTextarea("infoTextBox")
+    .setPosition(x,y)
+    .setSize(1000, 200)
+    .setText("")
+    .setFont(createFont("Arial", 12))  // Set font size if needed
+    .setLineHeight(15)  // Adjust the spacing between lines
+    .setColor(color(255,140,140))  // Text color
+    .setColorBackground(color(0, 100))  // Background color
+    .setColorForeground(color(0, 150));  // Foreground color
+
+  
+  
+  scaledBuffer =  new DataPoint[0];
+}
+
+void addStartupMessage( String message ) {
+    String currentText = infoTextbox.getText();
+    infoTextbox.setText(currentText + "\n" + message);
+}
+
+boolean checkHackRFfile( String fileNameToCheck) {
+	String tmpFileName = glb_currentPath + "\\" + fileNameToCheck;  
+	File file = new File(tmpFileName);		
+	if (!file.exists()) {
+		addStartupMessage("File " + fileNameToCheck + " NOT FOUND in : " + glb_currentPath);
+		return false;
+	}
+	else
+		return true;
+}

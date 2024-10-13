@@ -29,9 +29,12 @@ class HackRFspektrum implements SpektrumInterface {
 			String tmpFileName = glb_currentPath + "\\hackrf_info.exe";  
 			File file = new File(tmpFileName);		
 			if (!file.exists()) {
-				MsgBox("File " + tmpFileName + " is not found in " + glb_currentPath, "Spektrum");
+				// MsgBox("File " + tmpFileName + " is not found in " + glb_currentPath, "Spektrum");
+                // addStartupMessage("File " + tmpFileName + " is not found in " + glb_currentPath);
+				
+				return new String[0];
 			}
-			
+
 			// Create the process to run hackrf_info.exe
 			//
 			ProcessBuilder builder = new ProcessBuilder( glb_currentPath + "\\hackrf_info.exe" );
@@ -70,6 +73,7 @@ class HackRFspektrum implements SpektrumInterface {
 		String tmpFileName = glb_currentPath + "\\hackrf_sweep.exe";
 		File tmpFile = new File(tmpFileName);   
 		if (!tmpFile.exists()) {
+            addStartupMessage( "File " + tmpFileName + " is not found in " + glb_currentPath );
 			MsgBox("File " + tmpFileName + " is not found in " + glb_currentPath, "Spektrum");
 			return -1;
 		}

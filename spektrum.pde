@@ -103,6 +103,9 @@ String configurationName;
 DropdownList configurationDropdown;
 int configurationSaveDelay = 0;
 
+int glb_fps = 60;
+String glb_renderer = "P2D";
+
 // Maybe not needed -- TBD
 //
 public class configurationClass {
@@ -193,7 +196,7 @@ int glb_lastCursor=0;
 ListBox deviceDropdown;
 DropdownList gainDropdown;
 DropdownList serialDropdown;
-
+Textarea infoTextbox;
 
 String[] glb_devices;
 
@@ -300,33 +303,7 @@ void MsgBox( String Msg, String Title ) {
   javax.swing.JOptionPane.showMessageDialog ( null, Msg, Title, javax.swing.JOptionPane.ERROR_MESSAGE  );
 }
 
-void setupStartControls() {
-  int x, y;
-  int width = 170;
 
-  x = 15;
-  y = 40;
-
-  // frameRate(30);
-
-  deviceDropdown = cp5.addListBox("deviceDropdown")
-    .setBarHeight(20)
-    .setItemHeight(20)
-    .setPosition(x, y)
-    .setSize(width, 20 + ((glb_devices.length) * 30));  // TAG_HACKRF
-
-  deviceDropdown.getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Select device");
-  int i;
-  for (i=0; i<glb_devices.length; i++) {
-     deviceDropdown.addItem(glb_devices[i], i);
-  }
-  
-  
-  
-  // deviceDropdown.addItem("Hack RF", i); // TAG_HACKRF
-
-  scaledBuffer =  new DataPoint[0];
-}
 
 // Generic event handler for controls
 //
@@ -696,6 +673,7 @@ public void toggleRelMode(int theValue) {
 
 public void deviceDropdown(int theValue) {
     deviceDropdown.hide();
+	infoTextbox.hide();
     
     String selectedText = deviceDropdown.getItem(theValue).get("name").toString();
     
@@ -736,7 +714,6 @@ public void deviceDropdown(int theValue) {
     glb_fullRangeMin = spektrumReader.getFrequencyRangeSupported()[0];
     glb_fullRangeMax = spektrumReader.getFrequencyRangeSupported()[1];
     
-    // println("XXXXXXXXXXXXXXXXXXXXXXXXXX  " + spektrumReader.getFrequencyRangeSupported()[0] + "     " + spektrumReader.getFrequencyRangeSupported()[1] ); 
     
     setupControls();
     relMode = 0;
@@ -748,49 +725,70 @@ public void deviceDropdown(int theValue) {
 public void gainDropdown(int theValue) {
     spektrumReader.setGain(gains[theValue]);
 }
+
+
+// ======================================================================================
+//
+
 void settings() {
     lastWidth = 1200;
     lastHeight = 750;
-    size(lastWidth, lastHeight, P3D );  // P2D, P3D Size should be the first statement TODO add method to settings file
+	
+	File file = new File("P3D");		
+	if (file.exists()) 	
+		size(lastWidth, lastHeight, P3D );  // P2D, P3D Size should be the first statement TODO add method to settings file
+	else
+		size(lastWidth, lastHeight );  // P2D, P3D Size should be the first statement TODO add method to settings file
 }
 
 void setup() {
-  windowTitle( glb_WindowTitle + glb_ProgramVersion );
-  surface.setResizable(true);
-  frameRate(60);  // TODO Add it to settings file
-  
-    
-  // Get the current working directory
-  //
-  glb_currentPath = System.getProperty("user.dir");
-  println("Current working directory: " + glb_currentPath);
-  
-  glb_currentPath = "D:\\bin\\SDR\\hackRF-Tools-bin";
-  
-  // Get RTL devices
-  //
-  glb_devices = Rtlspektrum.getDevices();
-  for (String dev : glb_devices) {
-    println(dev);
-  }
-  
-  // Get HackRF devices
-  //
-  HackRFspektrum hackRF = new HackRFspektrum(0);  // Create an instance of HackRFspektrum
-  String[] devicesHackRF = hackRF.getDevices();   // Call the non-static method on the instance
-  for (String dev : devicesHackRF) {
-    println(dev);
-	glb_devices = addElement(glb_devices, "Hack RF (" + dev + ")");
-  }
+	windowTitle( glb_WindowTitle + glb_ProgramVersion );
+	surface.setResizable(true);
+	frameRate(60);  // TODO Add it to settings file
 
-  cp5 = new ControlP5(this);
+	// Get the current working directory
+	//
+	glb_currentPath = System.getProperty("user.dir") + "\\hackrf";
 
-  setupStartControls();
+	println("Current working directory: " + glb_currentPath);
 
-  
-  println("Reached end of setup.");
+	// Get RTL devices
+	//
+	glb_devices = Rtlspektrum.getDevices();
+	for (String dev : glb_devices) {
+		println(dev);
+	}
 
-  reloadConfigurationAfterStartUp = CONFIG_RELOAD_DELAY;//Reload configuration after this time
+	// Get HackRF devices
+	//
+	HackRFspektrum hackRF = new HackRFspektrum(0);  // Create an instance of HackRFspektrum
+	String[] devicesHackRF = hackRF.getDevices();   // Call the non-static method on the instance
+	for (String dev : devicesHackRF) {
+		println(dev);
+		glb_devices = addElement(glb_devices, "Hack RF (" + dev + ")");
+	}
+
+	cp5 = new ControlP5(this);
+
+	setupStartControls();
+
+	for (int i=0; i<glb_devices.length; i++) {
+		deviceDropdown.addItem(glb_devices[i], i);
+	}
+	
+	// Check files
+	//
+	boolean allFound = true;
+	allFound = allFound && checkHackRFfile("hackrf_sweep.exe");
+	allFound = allFound && checkHackRFfile("hackrf_info.exe");
+	allFound = allFound && checkHackRFfile("hackrf.dll");
+	allFound = allFound && checkHackRFfile("libfftw3f-3.dll");
+	allFound = allFound && checkHackRFfile("pthreadVC2.dll");
+	if (allFound) addStartupMessage("HackRF Files OK" );
+	
+	println("Reached end of setup.");
+
+	reloadConfigurationAfterStartUp = CONFIG_RELOAD_DELAY;//Reload configuration after this time
 }
 
 void stop() {
@@ -1356,6 +1354,9 @@ void loadConfig() {
   if (glb_binStep < binStepProtection) glb_binStep = binStepProtection;
   cropPercent = max( min(70, cropPercent ), 0 );	// Just in case....
 
+  glb_fps = table.getInt(configurationActive, "fps");
+  glb_renderer = table.getString(configurationActive, "renderer");
+  
   // Init zoom back
   glb_zoomBackFreqMin = glb_startFreq;
   glb_zoomBackFreqMax = glb_stopFreq;
@@ -1399,7 +1400,10 @@ void saveConfigToIndx( int configIndx ) {
     table.setInt(configIndx, "ifOffset", ifOffset);
     table.setInt(configIndx, "ifType", ifType);
     table.setInt(configIndx, "cropPrcnt", cropPercent);
-
+	
+	table.setInt(configIndx, "fps", glb_fps);
+    table.setString(configIndx, "renderer", glb_renderer);
+	
     saveTable(table, glb_configFileName, "csv");
 
     println("STORE TO " +  configIndx + " : startFreq = " + glb_startFreq + " stopFreq = " + glb_stopFreq + " binStep = " + glb_binStep + " scaleMin = " +
@@ -1417,7 +1421,7 @@ void makeConfig() {
 
   try {
     file=new File(glb_configFileName);
-    println( file.getAbsolutePath());
+    // println( "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX " +file.getAbsolutePath());
     if (file.exists()) {
       println("File " + glb_configFileName + " exists.");
     } else {
@@ -1425,18 +1429,18 @@ void makeConfig() {
       file.createNewFile();
       fw = new FileWriter(file);
 
-      fw.write("startFreq,stopFreq,binStep,scaleMin,scaleMax,rfGain,minFreq,maxFreq,ifOffset,ifType,cropPrcnt,activeConfig,configName\n");
+      fw.write("startFreq,stopFreq,binStep,scaleMin,scaleMax,rfGain,minFreq,maxFreq,ifOffset,ifType,cropPrcnt,activeConfig,configName,fps,renderer\n");
 
-      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,AutoSave\n");
-      fw.write("88000000,108000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,FM Band\n");
-      fw.write("118000000,178000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,VHF Band+\n");
-      fw.write("380000000,450000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,UHF Band+\n");
-      fw.write("120000000,170000000,2000,-110,40,0,24000000,1800000000,120000000,1,0,0,Spyverter\n");
-      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config A\n");
-      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config B\n");
-      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config C\n");
-      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config D\n");
-      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config E\n");
+      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,AutoSave,60,P2D\n");
+      fw.write("88000000,108000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,FM Band,60,P2D\n");
+      fw.write("118000000,178000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,VHF Band+,60,P2D\n");
+      fw.write("380000000,450000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,UHF Band+,60,P2D\n");
+      fw.write("120000000,170000000,2000,-110,40,0,24000000,1800000000,120000000,1,0,0,Spyverter,60,P2D\n");
+      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config A,60,P2D\n");
+      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config B,60,P2D\n");
+      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config C,60,P2D\n");
+      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config D,60,P2D\n");
+      fw.write("24000000,1800000000,2000,-110,40,0,24000000,1800000000,0,0,0,0,Config E,60,P2D\n");
 
       fw.flush();
       fw.close();
