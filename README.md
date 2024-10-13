@@ -1,10 +1,15 @@
 # Spektrum
 # Spektrum - SV Mods part2 - WIP
 Inital support for HackRF based on hacKRF_sweep : 1M to 7G in 1 second...
+
 Tooltips
+
 Mouse Arrows
+
 Information on the title bar (frequency range and bin size)
+
 Code cleanup, variable naming, code refactoring
+
 
 Processing 4 and Spektrum has issues with resizing.
 
