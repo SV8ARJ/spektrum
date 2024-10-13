@@ -18,10 +18,12 @@ import rtlspektrum.Rtlspektrum;
 import java.io.FileWriter;
 import java.util.*;
 import processing.serial.*;
+import java.io.*;
 
-Serial myPort;
+String ProgramVersion = "v0.20 - SV-mods";
 
-Rtlspektrum spektrumReader;
+SpektrumInterface spektrumReader;	// TODO ... I will regret this, why not just use ifs on every call ? It's only 30 or so...
+
 ControlP5 cp5;
 DataPoint[] scaledBuffer;
 
@@ -43,6 +45,17 @@ int movingCursor = CURSORS.CUR_NONE;
 
 String tmpMessage;
 String tmpMessage1;
+int genericFrameCounter = 0;  // Used for various tests. Gets incremented with every frame TAG_ARJ
+
+// HackRF stuff TAG_ARJ
+//
+String glb_currentPath;
+String glb_sweepCommandLine;
+String glb_cmdFrequencyRange;
+String glb_cmdLnaGain;              // [-l gain_db] # RX LNA (IF) gain, 0-40dB, 8dB steps
+String glb_cmdVgaGain = "-g 10";    // [-g gain_db] # RX VGA (baseband) gain, 0-62dB, 2dB steps
+String glb_cmdPreAmp = "-a 1";      // [-a amp_enable] # RX RF amplifier 1=Enable, 0=Disable
+
 
 final int NONE = 0;
 // TABS
@@ -120,6 +133,7 @@ int infoRectangle[] = {0, 0, 0, 0};
 String infoText = "";
 
 int lastWidth =0;
+int lastHeight =0;
 
 int zoomBackFreqMin = 0;
 int zoomBackFreqMax = 0;
@@ -175,6 +189,7 @@ DropdownList serialDropdown;
 
 
 String[] devices;
+
 int[] gains;
 
 int relMode = 0;
@@ -212,7 +227,7 @@ infoScreen infoHelp;
 
 //========= added by Dave N
 Table table;
-String fileName = "config.csv";  // config file used to save and load program setting like frequency etc.
+String glb_configFileName = "config.csv";  // config file used to save and load program setting like frequency etc.
 boolean setupDone = false;
 boolean frozen = true;
 boolean vertCursor = false;
@@ -291,14 +306,17 @@ void setupStartControls() {
     .setBarHeight(20)
     .setItemHeight(20)
     .setPosition(x, y)
-    .setSize(width, 20 + ((devices.length +1) * 30));  // TAG_HACKRF
+    .setSize(width, 20 + ((devices.length) * 30));  // TAG_HACKRF
 
   deviceDropdown.getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Select device");
   int i;
   for (i=0; i<devices.length; i++) {
      deviceDropdown.addItem(devices[i], i);
   }
-  deviceDropdown.addItem("Hack RF", 99); // TAG_HACKRF
+  
+  
+  
+  // deviceDropdown.addItem("Hack RF", i); // TAG_HACKRF
 
   scaledBuffer =  new DataPoint[0];
 }
@@ -529,7 +547,7 @@ void setupControls() {
 
   // Quick n dirty. Load from file and populate list.
   //
-  Table tmpTable = loadTable(fileName, "header");
+  Table tmpTable = loadTable(glb_configFileName, "header");
 
   y+=35;
 
@@ -1122,7 +1140,7 @@ public void rfGain02(int gainValue) {
 }
 
 public void rfGain03(int gainValue) {
-  int tpmInt = (int) (( gains[0] + ( gains[gains.length-1] - gains[0]) *2 / 3 )  ) ;
+  int tpmInt = (int) (( gains[0] + ( gains[gains.length-1] - gains[0]) *2.5 / 3 )  ) ;
   rfGain( tpmInt );
   cp5.get(Knob.class, "rfGain").setValue(tpmInt);
 }
@@ -1379,8 +1397,21 @@ public void toggleRelMode(int theValue) {
 public void deviceDropdown(int theValue) {
   deviceDropdown.hide();
   
-  if ( theValue <98 ) {
-    spektrumReader = new Rtlspektrum(theValue);
+  String selectedText = deviceDropdown.getItem(theValue).get("name").toString();
+
+  // TODO_REMOVE MsgBox("Device selected : " + theValue + " " + selectedText, "Spektrum");
+  
+  if ( selectedText.startsWith("Hack RF") ) {
+	spektrumReader = new HackRFspektrum(theValue);
+	// MsgBox("HackRF device selected.", "Spektrum");
+  }
+  else
+  {
+    spektrumReader = new RtlspektrumWrapper(theValue);
+    // spektrumReader = new Rtlspektrum(theValue);
+	// MsgBox("RTL-SDR device selected.", "Spektrum");  
+  }
+  
     int status = spektrumReader.openDevice();
   
     // Initialiaze configuration class array
@@ -1395,44 +1426,62 @@ public void deviceDropdown(int theValue) {
     //============================
   
     if (status < 0) {
-      MsgBox("Can't open rtl-sdr device.", "Spektrum");
+      MsgBox("Can't open SDR device.", "Spektrum");
       exit();
       return;
     }
   
     gains = spektrumReader.getGains();
-  
+
     setupControls();
     relMode = 0;
   
     setupDone = true;
-  }
-  else    // 99 is HackRF 
-  {
-    
-  }
-  
-  
+    genericFrameCounter = 0;
 }
 
 public void gainDropdown(int theValue) {
   spektrumReader.setGain(gains[theValue]);
 }
+void settings() {
+  lastWidth = 1200;
+  lastHeight = 750;
+  size(lastWidth, lastHeight );  // P2D, P3D Size should be the first statement
+}
 
 void setup() {
-  size(1200, 750);  // Size should be the first statement
-  // if (frame != null) {
-    surface.setResizable(true);
-  // }
-
+  windowTitle( "Spektrum " + ProgramVersion );
+  surface.setResizable(true);
+  
+    
+  // Get the current working directory
+  //
+  glb_currentPath = System.getProperty("user.dir");
+  println("Current working directory: " + glb_currentPath);
+  
+  glb_currentPath = "D:\\bin\\SDR\\hackRF-Tools-bin";
+  
+  // Get RTL devices
+  //
   devices = Rtlspektrum.getDevices();
   for (String dev : devices) {
     println(dev);
+  }
+  
+  // Get HackRF devices
+  //
+  HackRFspektrum hackRF = new HackRFspektrum(0);  // Create an instance of HackRFspektrum
+  String[] devicesHackRF = hackRF.getDevices();   // Call the non-static method on the instance
+  for (String dev : devicesHackRF) {
+    println(dev);
+	devices = addElement(devices, "Hack RF (" + dev + ")");
   }
 
   cp5 = new ControlP5(this);
 
   setupStartControls();
+
+  
   println("Reached end of setup.");
 
   reloadConfigurationAfterStartUp = CONFIG_RELOAD_DELAY;//Reload configuration after this time
@@ -1441,23 +1490,40 @@ void setup() {
 void stop() {
   spektrumReader.stopAutoScan();
 }
+void windowResized() {
+	println("windowResized: RESIZE DETECTED ");
+	genericFrameCounter = 0;
+	surface.setSize(width, height);
+}
 
 void draw() {
+  genericFrameCounter++;	
   background(color(#222324));
 
-  if (!setupDone) {
+  if ( !setupDone ) {
     return;
   }
 
-  if ( width != lastWidth )
+  if ( width != lastWidth || height != lastHeight )
   {
     refShow = false;
     avgShow = false;
-    println("RESIZE DETECTED");
+    println("RESIZE DETECTED :" + genericFrameCounter);
     lastWidth = width;
+	lastHeight = height;
+	
     cp5.get(Toggle.class, "refShow").setValue(0);
     cp5.get(Toggle.class, "avgShow").setValue(0);
+	// if (genericFrameCounter > 100) {
+	// 	genericFrameCounter = 0;
+	// 	setupDone = false;
+	// }
     return;
+  }
+  if ( genericFrameCounter == 100 )
+  {
+	// println("RESIZE APPLIED :" + genericFrameCounter);
+	  //windowResize(width, height );
   }
 
   if (relMode == 1) {
@@ -1924,7 +1990,7 @@ void loadConfigPostCreation()
 }
 
 void loadConfig() {
-  table = loadTable(fileName, "header");
+  table = loadTable(glb_configFileName, "header");
 
   startFreq = table.getInt(configurationActive, "startFreq");
   stopFreq = table.getInt(configurationActive, "stopFreq");
@@ -1951,7 +2017,7 @@ void loadConfig() {
   zoomBackScalMin = scaleMin;
   zoomBackScalMax = scaleMax;
 
-  println("loadConfig: Config table " + fileName + " loaded.");
+  println("loadConfig: Config table " + glb_configFileName + " loaded.");
   println("startFreq = " + startFreq + " stopFreq = " + stopFreq + " binStep = " + binStep + " scaleMin = " +
     scaleMin + " scaleMax = ", scaleMax + " rfGain = " + rfGain + " fullRangeMin = " + fullRangeMin + "  fullRangeMax = " + fullRangeMax +
     " ifOffset = " + ifOffset + " ifType = " + ifType);
@@ -1989,12 +2055,12 @@ void saveConfigToIndx( int configIndx ) {
     table.setInt(configIndx, "ifType", ifType);
     table.setInt(configIndx, "cropPrcnt", cropPercent);
 
-    saveTable(table, fileName, "csv");
+    saveTable(table, glb_configFileName, "csv");
 
     println("STORE TO " +  configIndx + " : startFreq = " + startFreq + " stopFreq = " + stopFreq + " binStep = " + binStep + " scaleMin = " +
       scaleMin + " scaleMax = ", scaleMax + " rfGain = " + rfGain + " fullRangeMin = " + fullRangeMin + "  fullRangeMax = " + fullRangeMax +
       " ifOffset = " + ifOffset + " ifType = " + ifType);
-    println("Config table " + fileName + " saved.");
+    println("Config table " + glb_configFileName + " saved.");
   }
 }
 
@@ -2002,13 +2068,13 @@ void makeConfig() {
 
   FileWriter fw= null;
   File file =null;
-  println("File " + fileName);
+  println("File " + glb_configFileName);
 
   try {
-    file=new File(fileName);
+    file=new File(glb_configFileName);
     println( file.getAbsolutePath());
     if (file.exists()) {
-      println("File " + fileName + " exists.");
+      println("File " + glb_configFileName + " exists.");
     } else {
       // Recreate missing config file
       file.createNewFile();
@@ -2029,7 +2095,7 @@ void makeConfig() {
 
       fw.flush();
       fw.close();
-      println(fileName +  " created succesfully");
+      println(glb_configFileName +  " created succesfully");
     }
   }
   catch(IOException e) {
@@ -2558,4 +2624,21 @@ void mouseWheel(MouseEvent event) {
     timeToSet = TIME_UNTIL_SET;
     break;
   }
+  
+}
+
+
+String[] addElement(String[] original, String newElement) {
+    // Create a new array with one more slot than the original array
+    String[] newArray = new String[original.length + 1];
+    
+    // Copy all elements from the original array to the new array
+    for (int i = 0; i < original.length; i++) {
+        newArray[i] = original[i];
+    }
+    
+    // Add the new element to the last position of the new array
+    newArray[original.length] = newElement;
+    
+    return newArray;
 }
