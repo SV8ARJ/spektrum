@@ -20,7 +20,8 @@ import java.util.*;
 import processing.serial.*;
 import java.io.*;
 
-String ProgramVersion = "v0.20 - SV-mods";
+String glb_WindowTitle = "Spektrum ";
+String glb_ProgramVersion = "v0.20b - SV8ARJ";
 
 SpektrumInterface spektrumReader;	// TODO ... I will regret this, why not just use ifs on every call ? It's only 30 or so...
 
@@ -52,9 +53,10 @@ int genericFrameCounter = 0;  // Used for various tests. Gets incremented with e
 String glb_currentPath;
 String glb_sweepCommandLine;
 String glb_cmdFrequencyRange;
+String glb_cmdBinSize = " -W 25000";
 String glb_cmdLnaGain;              // [-l gain_db] # RX LNA (IF) gain, 0-40dB, 8dB steps
-String glb_cmdVgaGain = "-g 10";    // [-g gain_db] # RX VGA (baseband) gain, 0-62dB, 2dB steps
-String glb_cmdPreAmp = "-a 1";      // [-a amp_enable] # RX RF amplifier 1=Enable, 0=Disable
+String glb_cmdVgaGain = " -g 10";    // [-g gain_db] # RX VGA (baseband) gain, 0-62dB, 2dB steps
+String glb_cmdPreAmp = " -a 0";      // [-a amp_enable] # RX RF amplifier 1=Enable, 0=Disable
 
 
 final int NONE = 0;
@@ -82,6 +84,8 @@ final int ITEM_RF_GAIN = 4;
 final int  IF_TYPE_NONE      = 0;
 final int  IF_TYPE_ABOVE     = 1;
 final int  IF_TYPE_BELOW     = 2;
+
+final int TOOLTIP_TIME        = 300;    // 5 seconds at 60 fps
 // }
 
 // Configuration
@@ -135,21 +139,21 @@ String infoText = "";
 int lastWidth =0;
 int lastHeight =0;
 
-int zoomBackFreqMin = 0;
-int zoomBackFreqMax = 0;
+long glb_zoomBackFreqMin = 0;
+long glb_zoomBackFreqMax = 0;
 int zoomBackScalMin = 0;
 int zoomBackScalMax = 0;
 
-int fullRangeMin = 24000000;
-int fullRangeMax = 1800000000;
-int fullScaleMin = -110;
-int fullScaleMax = 40;
+long glb_fullRangeMin = 24000000;
+long glb_fullRangeMax = 1800000000;
+int glb_fullScaleMin = -110;
+int glb_fullScaleMax = 40;
 
-int startFreq = 88000000;
-int stopFreq = 108000000;
-int binStep = 1000;
+long glb_startFreq = 88000000;
+long glb_stopFreq = 108000000;
+int glb_binStep = 1000;
 int binStepProtection = 200;
-int vertCursorFreq = 88000000;
+long vertCursorFreq = 88000000;
 int tmpFreq = 0;
 int rfGain = 0;
 int ifOffset = 0;
@@ -183,12 +187,15 @@ int cursorVerticalRightX_Color = #ff80d5; // Magenta
 int cursorHorizontalTopY_Color = #ff80d5;
 
 int cursorDeltaColor = #00E010;
+int glb_tooltipCounter = 0;
+int glb_lastCursor=0;
+
 ListBox deviceDropdown;
 DropdownList gainDropdown;
 DropdownList serialDropdown;
 
 
-String[] devices;
+String[] glb_devices;
 
 int[] gains;
 
@@ -306,12 +313,12 @@ void setupStartControls() {
     .setBarHeight(20)
     .setItemHeight(20)
     .setPosition(x, y)
-    .setSize(width, 20 + ((devices.length) * 30));  // TAG_HACKRF
+    .setSize(width, 20 + ((glb_devices.length) * 30));  // TAG_HACKRF
 
   deviceDropdown.getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Select device");
   int i;
-  for (i=0; i<devices.length; i++) {
-     deviceDropdown.addItem(devices[i], i);
+  for (i=0; i<glb_devices.length; i++) {
+     deviceDropdown.addItem(glb_devices[i], i);
   }
   
   
@@ -319,713 +326,6 @@ void setupStartControls() {
   // deviceDropdown.addItem("Hack RF", i); // TAG_HACKRF
 
   scaledBuffer =  new DataPoint[0];
-}
-
-void setupControls() {
-  int x, y;
-  int width = 170;
-  Textlabel tmpLabel;
-
-  // Setup TABS
-  //
-  // if you want to receive a controlEvent when
-  // a  tab is clicked, use activeEvent(true)
-  //
-
-  cp5.addTab("default")
-    .setColorLabel(color(255))
-    .activateEvent(true)
-    .setId(TAB_GENERAL)
-    .setLabel(tabLabels[TAB_GENERAL])
-    .setHeight(TAB_HEIGHT_ACTIVE)
-    ;
-  background(color(#222324));
-
-  // General tab (1) =================================================
-  //
-  x = 15;
-  y = 10;
-  uiNextLineIndex = 0;
-
-  uiLines[uiNextLineIndex++][TAB_GENERAL] = y;
-
-  y+=35;
-
-  cp5.addTextlabel("receiverLabel")
-    .setText("RECEIVER RANGE:")
-    .setPosition(x-13, y)
-    .setColorValue(0xffffff00)
-    .setFont(createFont("ARIAL", 10))
-    ;
-  y+=35;
-
-  cp5.addTextfield("startFreqText")
-    .setPosition(x, y)
-    .setSize(width-50, 20)
-    .setText(str(startFreq))
-    .setAutoClear(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Start frequency [Hz]")
-    ;
-
-
-  cp5.addButton("resetMin")
-    //.setValue(0)
-    .setPosition(width-30, y)
-    .setSize(40, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("|<< RST")
-    ;
-
-  // --------------------------------------------------------------------
-  //
-  y += 40;
-
-  cp5.addTextfield("stopFreqText")
-    .setPosition(x, y)
-    .setSize(width-50, 20)
-    .setText(str(stopFreq))
-    .setAutoClear(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("End frequency [Hz]")
-    ;
-
-  cp5.addButton("resetMax")
-    //.setValue(0)
-    .setPosition(width-30, y)
-    .setSize(40, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("RST >>|")
-    ;
-
-  // --------------------------------------------------------------------
-  //
-  y += 40;
-
-  cp5.addTextfield("binStepText")
-    .setPosition(x, y)
-    .setSize(60, 20)
-    .setText(str(binStep))
-    .setAutoClear(true)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Bin size [Hz]")
-    ;
-
-
-  cp5.addButton("setRangeButton")
-    .setValue(0)
-    .setPosition(95, y)
-    .setSize(width/2, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Set range")
-    ;
-
-  y += 10;
-
-  uiLines[uiNextLineIndex++][TAB_GENERAL] = y;
-
-  // -------------------------------------------------------------------- IF offset
-  //
-  y+=35;
-
-  cp5.addTextlabel("ifLabel")
-    .setText("UP/DOWN CONVERTER:")
-    .setPosition(x-13, y)
-    .setColorValue(0xffffff00)
-    .setFont(createFont("ARIAL", 10))
-    ;
-
-  y+=30;
-
-  cp5.addTextfield("ifOffset")
-    .setPosition(x, y)
-    .setSize(90, 20)
-    .setText(str(binStep))
-    .setAutoClear(true)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("IF Frequency")
-    ;
-
-  cp5.get(Textfield.class, "ifOffset").setText(str(ifOffset));  // Spaggeti because mouse events and code modification events have the same result on event code...
-
-  // toggle vertical sursor on or off
-  cp5.addToggle("ifPlusToggle")
-    .setPosition(x  + 100, y)
-    .setSize(20, 20)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.TOP_OUTSIDE).setText("Above")
-    ;
-
-  // toggle for how samples are shown - line / dots
-  cp5.addToggle("ifMinusToggle")
-    .setPosition(x + 140, y)
-    .setSize(20, 20)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.TOP_OUTSIDE).setText("Below")
-    ;
-
-  uiLines[uiNextLineIndex++][TAB_GENERAL] = y;
-
-  // --------------------------------------------------------------------
-  //
-  y+=35;
-
-  cp5.addTextlabel("optionsLabel")
-    .setText("VARIOUS OPTIONS:")
-    .setPosition(x-13, y)
-    .setColorValue(0xffffff00)
-    .setFont(createFont("ARIAL", 10))
-    ;
-
-  y+=35;
-
-  // toggle vertical sursor on or off
-  cp5.addToggle("vertCursorToggle")
-    .setPosition(x, y)
-    .setSize(20, 20)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.TOP_OUTSIDE).setText("Cursors")
-    ;
-
-  // toggle for how samples are shown - line / dots
-  cp5.addToggle("drawSampleToggle")
-    .setPosition(x + 70, y)
-    .setSize(20, 20)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.TOP_OUTSIDE).setText("Line/Dots")
-    ;
-
-  // toggle for how samples are shown - line / dots
-  cp5.addToggle("drawFill")
-    .setPosition(x + 140, y)
-    .setSize(20, 20)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.TOP_OUTSIDE).setText("Filled Graph")
-    ;
-
-  // --------------------------------------------------------------------
-  //
-  y += 40;
-
-  cp5.addToggle("offsetToggle")
-    .setPosition(x, y)
-    .setSize(20, 20)
-    .setValue(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Offset tunning")
-    ;
-
-  cp5.addToggle("minmaxToggle")
-    .setPosition(x + 70, y)
-    .setSize(20, 20)
-    .setValue(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Min/Max")
-    ;
-
-  cp5.addToggle("sweepToggle")
-    .setPosition(x + 140, y)
-    .setSize(20, 20)
-    .setValue(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Sweep")
-    ;
-
-  y += 40;
-
-  cp5.addTextfield("cropPrcntTxt")
-    .setPosition(x, y)
-    .setSize(60, 20)
-    .setText(str(cropPercent))
-    .setAutoClear(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Crop percent (0-70%)")
-    ;
-
-  uiLines[uiNextLineIndex++][TAB_GENERAL] = y;
-
-  // ---------------------------- Configurations
-  //
-  y+=35;
-
-  cp5.addTextlabel("configLabel")
-    .setText("CONFIGURATION PRESETS:")
-    .setPosition(x-13, y)
-    .setColorValue(0xffffff00)
-    .setFont(createFont("ARIAL", 10))
-    ;
-
-  // Quick n dirty. Load from file and populate list.
-  //
-  Table tmpTable = loadTable(glb_configFileName, "header");
-
-  y+=35;
-
-  cp5.addTextfield("presetName")
-    .setPosition(x, y)
-    .setSize(100, 20)
-    .setText(tmpTable.getString(0, "configName"))
-    .setAutoClear(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Current preset")
-    ;
-
-  configurationDropdown = cp5.addDropdownList("configurationList")
-    .setBarHeight(20)
-    .setItemHeight(20)
-    .setPosition(x, y)
-    .setSize(100, 80)
-    .hide();
-  configurationDropdown.getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText(configurationName);
-
-  cp5.addButton("selectPreset")
-    .setPosition(x+105, y)
-    .setSize(20, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("...")
-    ;
-
-  cp5.addButton("savePreset")
-    .setPosition(x+135, y)
-    .setSize(40, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Save to")
-    ;
-
-  // Populate presets dropdwon list
-  //
-  for (int i=0; i<nrOfConfigurations; i++) {
-    configurationDropdown.addItem( tmpTable.getString(i, "configName"), i);
-  }
-
-  y+=30;
-
-  // Bottom of UI area
-  //
-
-  y = graphHeight() - 130;
-  uiLines[uiNextLineIndex++][TAB_GENERAL] = y - 40;
-
-  cp5.addButton("freezeDisplay")
-    .setPosition(x, y)
-    .setSize(width/2-5, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Pause")
-    ;
-
-  cp5.addButton("exitProgram")
-    .setPosition(x+width/2+5, y)
-    .setSize(width/2-5, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Exit")
-    ;
-
-  uiLines[uiNextLineIndex++][TAB_GENERAL] = 0;
-
-  // TAB MEASURE =============================================================================
-  //
-
-  cp5.addTab(tabLabels[TAB_MEASURE])
-    .setColorBackground( tabColorBachground )
-    .activateEvent(true)
-    .setId(TAB_MEASURE)
-    .setHeight(TAB_HEIGHT)
-    ;
-
-
-  // GAIN SCALE --------------------------------------------------------------------
-  //
-
-  y = 10;
-  uiNextLineIndex = 0;
-
-  uiLines[uiNextLineIndex++][TAB_MEASURE] = y;
-
-  y+=35;
-  tmpLabel = cp5.addTextlabel("verticalLabel")
-    .setText("VERTICAL SCALE & RF GAIN:")
-    .setPosition(x-13, y)
-    .setColorValue(0xffffff00)
-    .setFont(createFont("ARIAL", 10))
-    ;
-  tmpLabel.moveTo(tabLabels[TAB_MEASURE]);
-
-  y+=35;
-
-  cp5.addTextfield("scaleMinText")
-    .setPosition(70, y)
-    .setSize(25, 20)
-    .setText(str(scaleMin))
-    .setAutoClear(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Lower")
-    ;
-  cp5.getController("scaleMinText").moveTo(tabLabels[TAB_MEASURE]);
-
-
-  cp5.addTextfield("scaleMaxText")
-    .setPosition(100, y)
-    .setSize(25, 20)
-    .setText(str(scaleMax))
-    .setAutoClear(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Upper")
-    ;
-  cp5.getController("scaleMaxText").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addButton("setScale")
-    .setPosition(130, y)
-    .setSize(60, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Set scale")
-    ;
-  cp5.getController("setScale").moveTo(tabLabels[TAB_MEASURE]);
-
-  // Gain
-  //
-  cp5.addTextlabel("label")
-    .setText("GAIN")
-    .setPosition(x+10, y-12)
-    .setSize(20, 20);
-  cp5.getController("label").moveTo(tabLabels[TAB_MEASURE]);
-
-  // --------------------------------------------------------------------
-  //
-  cp5.addKnob("rfGain")
-    .setRange(gains[0], gains[gains.length-1])
-    .setValue(50)
-    .setPosition(x+10, y  )
-    .setRadius(15)
-    .setDragDirection(Knob.VERTICAL)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("")
-    ;
-  cp5.getController("rfGain").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addButton("rfGain00")
-    .setPosition(x, y+40)
-    .setSize(9, 20)
-    .setColorLabel(buttonColorText)
-    .setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("")
-    ;
-
-  cp5.addButton("rfGain01")
-    .setPosition(x+10, y+40)
-    .setSize(9, 20)
-    .setColorLabel(buttonColorText)
-    .setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("")
-    ;
-  cp5.addButton("rfGain02")
-    .setPosition(x+20, y+40)
-    .setSize(9, 20)
-    .setColorLabel(buttonColorText)
-    .setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("")
-    ;
-
-  cp5.addButton("rfGain03")
-    .setPosition(x+30, y+40)
-    .setSize(9, 20)
-    .setColorLabel(buttonColorText)
-    .setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("")
-    ;
-
-  cp5.addButton("rfGain04")
-    .setPosition(x+40, y+40)
-    .setSize(9, 20)
-    .setColorLabel(buttonColorText)
-    .setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("")
-    ;
-
-  cp5.getController("rfGain00").moveTo(tabLabels[TAB_MEASURE]);
-  cp5.getController("rfGain01").moveTo(tabLabels[TAB_MEASURE]);
-  cp5.getController("rfGain02").moveTo(tabLabels[TAB_MEASURE]);
-  cp5.getController("rfGain03").moveTo(tabLabels[TAB_MEASURE]);
-  cp5.getController("rfGain04").moveTo(tabLabels[TAB_MEASURE]);
-
-  // --------------------------------------------------------------------
-  //
-  y += 40;
-
-  cp5.addButton("autoScale")
-    //.setValue(0)
-    .setPosition(70, y)
-    .setSize(55, 20)
-    .setColorLabel(buttonColorText)
-    .setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Auto scale")
-    ;
-  cp5.getController("autoScale").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addButton("resetScale")
-    //.setValue(0)
-    .setPosition(130, y)
-    .setSize(60, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Reset scale")
-    ;
-  cp5.getController("resetScale").moveTo(tabLabels[TAB_MEASURE]);
-
-  uiLines[uiNextLineIndex++][TAB_MEASURE] = y;
-
-  // REF, AVG, PERSISTENT --------------------------------------------------------------------
-  //
-
-  y+=35;
-  tmpLabel = cp5.addTextlabel("avgLabel")
-    .setText("VIDEO AVERAGING :")
-    .setPosition(x-13, y)
-    .setColorValue(0xffffff00)
-    .setFont(createFont("ARIAL", 10))
-    ;
-  tmpLabel.moveTo(tabLabels[TAB_MEASURE]);
-
-  y+=35;
-
-  // ---------------------------
-  cp5.addToggle("avgShow")
-    .setPosition(x, y)
-    .setSize(20, 20)
-    .setValue(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("ON/OFF")
-    ;
-  cp5.getController("avgShow").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addToggle("avgSamples")
-    .setPosition(x + 70, y)
-    .setSize(20, 20)
-    .setValue(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Freeze")
-    ;
-  cp5.getController("avgSamples").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addTextfield("avgDepthTxt")
-    .setSize(30, 20)
-    .setPosition(x + 130, y)
-    .setText(str(avgDepth))
-    .setAutoClear(true)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Depth")
-    ;
-  cp5.getController("avgDepthTxt").moveTo(tabLabels[TAB_MEASURE]);
-
-  uiLines[uiNextLineIndex++][TAB_MEASURE] = y;
-
-  // ------- REFERENCE
-  //
-  y+=35;
-  tmpLabel = cp5.addTextlabel("refLabel")
-    .setText("REFERENCE GRAPH:")
-    .setPosition(x-13, y)
-    .setColorValue(0xffffff00)
-    .setFont(createFont("ARIAL", 10))
-    ;
-  tmpLabel.moveTo(tabLabels[TAB_MEASURE]);
-
-  y+=35;
-
-  cp5.addToggle("refShow")
-    .setPosition(x, y)
-    .setSize(20, 20)
-    .setValue(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Show")
-    ;
-  cp5.getController("refShow").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addButton("refSave")
-    .setPosition(50, y)
-    .setSize(width/2-5, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Save Reference")
-    ;
-  cp5.getController("refSave").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addKnob("refYoffset")
-    .setRange(-graphHeight(), graphHeight())
-    .setValue(50)
-    .setPosition(150, y-10 )
-    .setRadius(15)
-    .setDragDirection(Knob.VERTICAL)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("")
-    ;
-  cp5.getController("refYoffset").moveTo(tabLabels[TAB_MEASURE]);
-
-  // --------------------------------------------------------------------
-  //
-  uiLines[uiNextLineIndex++][TAB_MEASURE] = y;
-
-  y+=35;
-  tmpLabel = cp5.addTextlabel("persistenceLabel")
-    .setText("MIN, MAX, MEDIAN HOLD :")
-    .setPosition(x-13, y)
-    .setColorValue(0xffffff00)
-    .setFont(createFont("ARIAL", 10))
-    ;
-  tmpLabel.moveTo(tabLabels[TAB_MEASURE]);
-
-  y+=35;
-
-  cp5.addToggle("perShowMaxToggle")
-    .setPosition(x, y)
-    .setSize(20, 20)
-    .setValue(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("MAX")
-    ;
-  cp5.getController("perShowMaxToggle").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addToggle("perShowMedToggle")
-    .setPosition(x + 35, y)
-    .setSize(20, 20)
-    .setValue(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("med")
-    ;
-  cp5.getController("perShowMedToggle").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addToggle("perShowMinToggle")
-    .setPosition(x + 70, y)
-    .setSize(20, 20)
-    .setValue(false)
-    .getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("MIN");
-  cp5.getController("perShowMinToggle").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addButton("perReset")
-    .setPosition(x + 130, y)
-    .setSize(40, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("RESET")
-    ;
-  cp5.getController("perReset").moveTo(tabLabels[TAB_MEASURE]);
-
-  uiLines[uiNextLineIndex++][TAB_MEASURE] = y;
-
-
-  // --------------------------------------------------------------------
-  //
-  y+=35;
-  tmpLabel = cp5.addTextlabel("zoomLabel")
-    .setText("PRESET / RETURN TO PREVIOUS:")
-    .setPosition(x-13, y)
-    .setColorValue(0xffffff00)
-    .setFont(createFont("ARIAL", 10))
-    ;
-  tmpLabel.moveTo(tabLabels[TAB_MEASURE]);
-
-  y+=25;
-
-  cp5.addButton("presetRestore")
-    .setPosition(x, y)
-    .setSize(width/2-5, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Pre-set")
-    ;
-  cp5.getController("presetRestore").moveTo(tabLabels[TAB_MEASURE]);
-
-  cp5.addButton("zoomBack")
-    .setPosition(x+width/2+5, y)
-    .setSize(width/2-5, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Back")
-    ;
-  cp5.getController("zoomBack").moveTo(tabLabels[TAB_MEASURE]);
-
-  y+=10;
-  uiLines[uiNextLineIndex++][TAB_MEASURE] = y;
-
-  // --------------------------------------------------------------------
-  //
-  y += 50;
-
-  cp5.addButton("toggleRelMode")
-    //.setValue(0)
-    .setPosition(x, y)
-    .setSize(width, 20)
-    .setColorBackground(#700000)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Relative mode")
-    ;
-  cp5.getController("toggleRelMode").moveTo(tabLabels[TAB_MEASURE]);
-
-
-  // --------------------------------------------------------------------
-  //
-  y = graphHeight() - 120;
-
-  uiLines[uiNextLineIndex++][TAB_GENERAL ] = 0;
-
-  cp5.addButton("helpShow")
-    .setPosition(60, y+110)
-    .setSize(80, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("HELP")
-    ;
-  cp5.getController("helpShow").moveTo("global");
-
-  cp5.addTextarea("textArea01")
-    .setPosition(0, 0)
-    .setSize(1, 1)
-    .setText("")
-    ;
-
-  // Keep the down left position for the Delta label
-  deltaLabelsYWaiting = y + 60;
-  deltaLabelsXWaiting = x + 10;
-  // Use it now
-  deltaLabelsY = deltaLabelsYWaiting;
-  deltaLabelsX = deltaLabelsXWaiting;
-
-  // Min/Max labels position (Down left)
-  minMaxTextY = height-50;
-
-  loadConfigPostCreation();
-
-  // TAB MR100 ===========================================================
-  //
-  /* NOT FINISHED */
-
-  /*
-  cp5.addTab(tabLabels[TAB_SARK100])
-    .setColorBackground( tabColorBachground )
-    .setColorLabel(color(255))
-    .activateEvent(true)
-    .setId(TAB_SARK100)
-    .setHeight(TAB_HEIGHT)
-    ;
-
-
-
-  x = 15;
-  y = 10;
-  uiNextLineIndex=0;
-  uiLines[uiNextLineIndex++][TAB_SARK100] = y;
-
-  y += 40;
-
-  serialDropdown = cp5.addDropdownList("serialPort")
-    .setBarHeight(20)
-    .setItemHeight(20)
-    .setPosition(x, y)
-    .setSize(80, 80);
-
-  serialDropdown.getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setText("Select port");
-  cp5.getController("serialPort").moveTo(tabLabels[TAB_SARK100]);
-
-  printArray(Serial.list());
-
-  for (int i=0; i<Serial.list().length; i++) {
-    serialDropdown.addItem(Serial.list()[i], i);
-  }
-
-  cp5.addButton("openSerial")
-    .setPosition(width-30, y)
-    .setSize(40, 20)
-    .setColorBackground(buttonColor)
-    .setColorLabel(buttonColorText)
-    .getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Open")
-    ;
-  cp5.getController("openSerial").moveTo(tabLabels[TAB_SARK100]);
-
-  uiLines[uiNextLineIndex++][TAB_SARK100] = 0;
-  */
-
-  println("Reached end of setupControls.");
-  startingupBypassSaveConfiguration = false;    //Ready loading... now you are able to save..
-
-  // arrange controller in separate tabs
-  // Tab 'global' is a tab that lies on top of any
-  // other tab and is always visible
 }
 
 // Generic event handler for controls
@@ -1051,7 +351,7 @@ void controlEvent(ControlEvent theEvent) {
 public void cropPrcntTxt(String tmpText) {
   cropPercent = parseInt(tmpText);
   cropPercent = max( min(70, cropPercent ), 0 );
-  cp5.get(Textfield.class, "cropPrcntTxt").setText(str(cropPercent));
+  cp5.get(Textfield.class, "cropPrcntTxt").setText(strArj(cropPercent));
   setRangeButton();
 }
 
@@ -1241,8 +541,8 @@ public void perShowMedToggle(int theValue) {
   }
 }
 
-public int ifCorrectedFreq( int inFreq ) {
-  int tmpFreq=inFreq;
+public double ifCorrectedFreq( long inFreq ) {
+  double tmpFreq=inFreq;
 
   if (ifType == IF_TYPE_ABOVE) tmpFreq -= ifOffset;
   else if (ifType == IF_TYPE_BELOW) tmpFreq = ifOffset - tmpFreq;
@@ -1262,23 +562,23 @@ public void setRange() {
   cursorVerticalRightX = -1;
 
   try {
-    startFreq = parseInt(cp5.get(Textfield.class, "startFreqText").getText());
-    stopFreq = parseInt(cp5.get(Textfield.class, "stopFreqText").getText());
-    binStep = parseInt(cp5.get(Textfield.class, "binStepText").getText());
+    glb_startFreq = Long.parseLong(cp5.get(Textfield.class, "startFreqText").getText());
+    glb_stopFreq = Long.parseLong(cp5.get(Textfield.class, "stopFreqText").getText());
+    glb_binStep = parseInt(cp5.get(Textfield.class, "binStepText").getText());
     cropPercent = parseInt(cp5.get(Textfield.class, "cropPrcntTxt").getText());
   }
   catch(Exception e) {
     println("setRange exception.");
   }
 
-  if (startFreq == 0 || stopFreq <= startFreq || binStep < 1) return;
+  if (glb_startFreq == 0 || glb_stopFreq <= glb_startFreq || glb_binStep < 1) return;
 
   configurationSaveDelay = CONFIG_SAVE_DELAY;
 
   double tmpCrop = (double) ( max( min(70, cropPercent ), 0 ) / 100.0);
   relMode = 0;
   spektrumReader.clearFrequencyRange();
-  spektrumReader.setFrequencyRange(startFreq, stopFreq, binStep, tmpCrop);
+  spektrumReader.setFrequencyRange(glb_startFreq, glb_stopFreq, glb_binStep, tmpCrop);
   spektrumReader.startAutoScan();
   println("setRange: CROP set to " + tmpCrop);
 }
@@ -1303,10 +603,10 @@ public void setScale() {
 
 
 public void resetScale() {
-  scaleMin = fullScaleMin;
-  scaleMax = fullScaleMax;
-  cp5.get(Textfield.class, "scaleMinText").setText(str(scaleMin));
-  cp5.get(Textfield.class, "scaleMaxText").setText(str(scaleMax));
+  scaleMin = glb_fullScaleMin;
+  scaleMax = glb_fullScaleMax;
+  cp5.get(Textfield.class, "scaleMinText").setText(strArj(scaleMin));
+  cp5.get(Textfield.class, "scaleMaxText").setText(strArj(scaleMax));
 }
 
 public void autoScale() {
@@ -1318,8 +618,8 @@ public void autoScale() {
       scaleMin = (int)(minScaledValue - abs((float)minScaledValue*0.1));
       scaleMax = (int)(maxScaledValue + abs((float)maxScaledValue*0.1));
     }
-    cp5.get(Textfield.class, "scaleMinText").setText(str(scaleMin));
-    cp5.get(Textfield.class, "scaleMaxText").setText(str(scaleMax));
+    cp5.get(Textfield.class, "scaleMinText").setText(strArj(scaleMin));
+    cp5.get(Textfield.class, "scaleMaxText").setText(strArj(scaleMax));
   }
 }
 
@@ -1353,13 +653,13 @@ void zoomBack() {
 
   swapCursors();//Fix order
 
-  cp5.get(Textfield.class, "startFreqText").setText( str(zoomBackFreqMin) );
-  cp5.get(Textfield.class, "stopFreqText").setText( str(zoomBackFreqMax) );
-  cp5.get(Textfield.class, "scaleMinText").setText( str(zoomBackScalMin) );
-  cp5.get(Textfield.class, "scaleMaxText").setText( str(zoomBackScalMax) );
+  cp5.get(Textfield.class, "startFreqText").setText( strArj(glb_zoomBackFreqMin) );
+  cp5.get(Textfield.class, "stopFreqText").setText( strArj(glb_zoomBackFreqMax) );
+  cp5.get(Textfield.class, "scaleMinText").setText( strArj(zoomBackScalMin) );
+  cp5.get(Textfield.class, "scaleMaxText").setText( strArj(zoomBackScalMax) );
 
-  zoomBackFreqMin = startFreq;
-  zoomBackFreqMax = stopFreq;
+  glb_zoomBackFreqMin = glb_startFreq;
+  glb_zoomBackFreqMax = glb_stopFreq;
   zoomBackScalMin = scaleMin;
   zoomBackScalMax = scaleMax;
 
@@ -1371,15 +671,15 @@ void zoomIn() {
 
   swapCursors();//Fix order
 
-  zoomBackFreqMin = startFreq;
-  zoomBackFreqMax = stopFreq;
+  glb_zoomBackFreqMin = glb_startFreq;
+  glb_zoomBackFreqMax = glb_stopFreq;
   zoomBackScalMin = scaleMin;
   zoomBackScalMax = scaleMax;
 
-  cp5.get(Textfield.class, "startFreqText").setText( str(startFreq + hzPerPixel() * (cursorVerticalLeftX - graphX())) );
-  cp5.get(Textfield.class, "stopFreqText").setText( str(startFreq + hzPerPixel() * (cursorVerticalRightX - graphX())) );
-  cp5.get(Textfield.class, "scaleMinText").setText( str(scaleMax - ( ( (cursorHorizontalBottomY - graphY()) * gainPerPixel() ) / 1000 )) );
-  cp5.get(Textfield.class, "scaleMaxText").setText( str(scaleMax - ( ( (cursorHorizontalTopY - graphY()) * gainPerPixel() ) / 1000 )) );
+  cp5.get(Textfield.class, "startFreqText").setText( strArj(glb_startFreq + hzPerPixel() * (cursorVerticalLeftX - graphX())) );
+  cp5.get(Textfield.class, "stopFreqText").setText( strArj(glb_startFreq + hzPerPixel() * (cursorVerticalRightX - graphX())) );
+  cp5.get(Textfield.class, "scaleMinText").setText( strArj(scaleMax - ( ( (cursorHorizontalBottomY - graphY()) * gainPerPixel() ) / 1000 )) );
+  cp5.get(Textfield.class, "scaleMaxText").setText( strArj(scaleMax - ( ( (cursorHorizontalTopY - graphY()) * gainPerPixel() ) / 1000 )) );
 
   setScale();
   setRange();
@@ -1395,22 +695,21 @@ public void toggleRelMode(int theValue) {
 }
 
 public void deviceDropdown(int theValue) {
-  deviceDropdown.hide();
-  
-  String selectedText = deviceDropdown.getItem(theValue).get("name").toString();
-
-  // TODO_REMOVE MsgBox("Device selected : " + theValue + " " + selectedText, "Spektrum");
-  
-  if ( selectedText.startsWith("Hack RF") ) {
-	spektrumReader = new HackRFspektrum(theValue);
-	// MsgBox("HackRF device selected.", "Spektrum");
-  }
-  else
-  {
-    spektrumReader = new RtlspektrumWrapper(theValue);
-    // spektrumReader = new Rtlspektrum(theValue);
-	// MsgBox("RTL-SDR device selected.", "Spektrum");  
-  }
+    deviceDropdown.hide();
+    
+    String selectedText = deviceDropdown.getItem(theValue).get("name").toString();
+    
+    // TODO_REMOVE MsgBox("Device selected : " + theValue + " " + selectedText, "Spektrum");
+    
+    if ( selectedText.startsWith("Hack RF") ) {
+    	spektrumReader = new HackRFspektrum(theValue);
+    	// MsgBox("HackRF device selected.", "Spektrum");
+    }
+    else
+    {
+      spektrumReader = new RtlspektrumWrapper(theValue);
+    	// MsgBox("RTL-SDR device selected.", "Spektrum");  
+    }
   
     int status = spektrumReader.openDevice();
   
@@ -1426,13 +725,19 @@ public void deviceDropdown(int theValue) {
     //============================
   
     if (status < 0) {
-      MsgBox("Can't open SDR device.", "Spektrum");
+      MsgBox("Error: Can't open SDR device.", "Spektrum");
       exit();
       return;
     }
   
+    // Device dependent parameters
+    //
     gains = spektrumReader.getGains();
-
+    glb_fullRangeMin = spektrumReader.getFrequencyRangeSupported()[0];
+    glb_fullRangeMax = spektrumReader.getFrequencyRangeSupported()[1];
+    
+    // println("XXXXXXXXXXXXXXXXXXXXXXXXXX  " + spektrumReader.getFrequencyRangeSupported()[0] + "     " + spektrumReader.getFrequencyRangeSupported()[1] ); 
+    
     setupControls();
     relMode = 0;
   
@@ -1441,17 +746,18 @@ public void deviceDropdown(int theValue) {
 }
 
 public void gainDropdown(int theValue) {
-  spektrumReader.setGain(gains[theValue]);
+    spektrumReader.setGain(gains[theValue]);
 }
 void settings() {
-  lastWidth = 1200;
-  lastHeight = 750;
-  size(lastWidth, lastHeight );  // P2D, P3D Size should be the first statement
+    lastWidth = 1200;
+    lastHeight = 750;
+    size(lastWidth, lastHeight, P3D );  // P2D, P3D Size should be the first statement TODO add method to settings file
 }
 
 void setup() {
-  windowTitle( "Spektrum " + ProgramVersion );
+  windowTitle( glb_WindowTitle + glb_ProgramVersion );
   surface.setResizable(true);
+  frameRate(60);  // TODO Add it to settings file
   
     
   // Get the current working directory
@@ -1463,8 +769,8 @@ void setup() {
   
   // Get RTL devices
   //
-  devices = Rtlspektrum.getDevices();
-  for (String dev : devices) {
+  glb_devices = Rtlspektrum.getDevices();
+  for (String dev : glb_devices) {
     println(dev);
   }
   
@@ -1474,7 +780,7 @@ void setup() {
   String[] devicesHackRF = hackRF.getDevices();   // Call the non-static method on the instance
   for (String dev : devicesHackRF) {
     println(dev);
-	devices = addElement(devices, "Hack RF (" + dev + ")");
+	glb_devices = addElement(glb_devices, "Hack RF (" + dev + ")");
   }
 
   cp5 = new ControlP5(this);
@@ -1493,7 +799,8 @@ void stop() {
 void windowResized() {
 	println("windowResized: RESIZE DETECTED ");
 	genericFrameCounter = 0;
-	surface.setSize(width, height);
+	// surface.setSize(width, height);
+  
 }
 
 void draw() {
@@ -1510,20 +817,11 @@ void draw() {
     avgShow = false;
     println("RESIZE DETECTED :" + genericFrameCounter);
     lastWidth = width;
-	lastHeight = height;
+	  lastHeight = height;
 	
     cp5.get(Toggle.class, "refShow").setValue(0);
     cp5.get(Toggle.class, "avgShow").setValue(0);
-	// if (genericFrameCounter > 100) {
-	// 	genericFrameCounter = 0;
-	// 	setupDone = false;
-	// }
     return;
-  }
-  if ( genericFrameCounter == 100 )
-  {
-	// println("RESIZE APPLIED :" + genericFrameCounter);
-	  //windowResize(width, height );
   }
 
   if (relMode == 1) {
@@ -1546,18 +844,64 @@ void draw() {
   maxScaledValue = Double.NEGATIVE_INFINITY;
   for (int i = 0; i<buffer.length; i++) {
     if (minValue > buffer[i] && buffer[i] != Double.NEGATIVE_INFINITY) {
-      minFrequency = startFreq + i * binStep;
+      minFrequency = glb_startFreq + i * glb_binStep;
       minValue = buffer[i];
     }
 
     if (maxValue < buffer[i] && buffer[i] != Double.POSITIVE_INFINITY) {
-      maxFrequency = startFreq + i * binStep;
+      maxFrequency = glb_startFreq + i * glb_binStep;
       maxValue = buffer[i];
     }
   }
 
   scaledBuffer = scaleBufferX(buffer);
 
+  // Mouse Pointer
+  //
+  // Hand cursor ?
+  //
+  if (Math.abs( mouseX -  cursorVerticalLeftX ) < 20  ||
+      Math.abs( mouseX -  cursorVerticalRightX ) < 20 ||
+      Math.abs( mouseY -  cursorHorizontalTopY ) < 20 ||
+      Math.abs( mouseY -  cursorHorizontalBottomY ) < 20
+  ) 
+  {
+      if (glb_lastCursor != HAND ) { cursor(HAND); glb_lastCursor = HAND; }
+  }
+  else if ( mouseX < graphX() ) {
+      if (glb_lastCursor != ARROW ) { cursor(ARROW); glb_lastCursor = ARROW; }
+  }
+  else
+  {
+      if (glb_lastCursor != NORMAL ) { cursor(NORMAL); glb_lastCursor = NORMAL; }
+  }
+  
+  // Tooltips
+  //
+  if ( width - mouseX < 30 ) {
+      if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
+      if ( glb_tooltipCounter >1 ) showTooltip( mouseX - 150, mouseY,"Use mouse wheel\n to change upper frequency");
+  }
+  else if ( height - mouseY < 30 ) {
+      if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
+      if ( glb_tooltipCounter >1 ) showTooltip( mouseX - 150, mouseY - 60,"Use mouse wheel\n to change lower db limit");   
+  }
+  else if ( mouseY < 30 ) {
+      if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
+      if ( glb_tooltipCounter >1 ) showTooltip( mouseX - 150, mouseY + 20,"Use mouse wheel\n to change upper db limit");   
+  }
+  else if ( Math.abs(graphX() - mouseX) < 30 ) {
+      if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
+      if ( glb_tooltipCounter >1 ) showTooltip( mouseX , mouseY ,"Use mouse wheel\n to change lower frequency");
+  }
+  else
+  {
+      glb_tooltipCounter = 0;
+  }
+  if ( glb_tooltipCounter > 1 ) glb_tooltipCounter--;
+  
+  
+  
   // Reference graph
   //
   if ( !refArrayHasData && refShow  ) {
@@ -1621,7 +965,7 @@ void draw() {
   }
 
 
-  drawGraphMatt(scaleMin, scaleMax, startFreq, stopFreq);
+  drawGraphMatt(scaleMin, scaleMax, glb_startFreq, glb_stopFreq);
 
   double scaleFactor = (double)graphHeight() / (scaleMax - scaleMin);
   DataPoint lastPoint = null;
@@ -1762,9 +1106,9 @@ void draw() {
   //
   textAlign(LEFT);
   fill(#C23B22);
-  text("Min: " + String.format("%.2f", minFrequency / 1000) + "kHz " + String.format("%.2f", minValue) + "dB", minMaxTextX +5, minMaxTextY+20);
+  text("Min: " + String.format("%.2f", minFrequency / 1000) + "MHz " + String.format("%.2f", minValue) + "dB", minMaxTextX +5, minMaxTextY+20);    // TO_CHECK
   fill(#03C03C);
-  text("Max: " + String.format("%.2f", maxFrequency / 1000) + "kHz " + String.format("%.2f", maxValue) + "dB", minMaxTextX +5, minMaxTextY+40);
+  text("Max: " + String.format("%.2f", maxFrequency / 1000) + "MHz " + String.format("%.2f", maxValue) + "dB", minMaxTextX +5, minMaxTextY+40);    // TO_CHECK
 
   // Cursors and measurements
   //
@@ -1881,6 +1225,7 @@ void helpShow ( ) {
   tmpMessage1+= "  press [ENTER]\n";
   tmpMessage1+= "\n\n\n\n\n\n\n\n\n\n\n\n\n";
   tmpMessage1+= "\n";
+  tmpMessage1+= glb_ProgramVersion + ": https://github.com/SV8ARJ/spektrum";
 
   if ( showInfoScreen == 0) {
     tmpTA.setPosition( graphX() + 10, graphY() + 10 );
@@ -1950,7 +1295,7 @@ void exitProgram() {
 public void resetMin() {
   //Set the start freq at full range
 
-  cp5.get(Textfield.class, "startFreqText").setText( str(fullRangeMin) );
+  cp5.get(Textfield.class, "startFreqText").setText( strArj(glb_fullRangeMin) );
   setRange();
 }
 
@@ -1958,16 +1303,16 @@ public void resetMin() {
 void resetMax() {
   //Set the stop freq full range
 
-  cp5.get(Textfield.class, "stopFreqText").setText( str(fullRangeMax) );
+  cp5.get(Textfield.class, "stopFreqText").setText( strArj(glb_fullRangeMax) );
   setRange();
 }
 
 void loadConfigPostCreation()
 {
-  cp5.get(Textfield.class, "startFreqText").setText( str(startFreq) );
-  cp5.get(Textfield.class, "stopFreqText").setText( str(stopFreq) );
-  cp5.get(Textfield.class, "scaleMinText").setText( str(scaleMin) );
-  cp5.get(Textfield.class, "scaleMaxText").setText( str(scaleMax) );
+  cp5.get(Textfield.class, "startFreqText").setText( strArj(glb_startFreq) );
+  cp5.get(Textfield.class, "stopFreqText").setText( strArj(glb_stopFreq) );
+  cp5.get(Textfield.class, "scaleMinText").setText( strArj(scaleMin) );
+  cp5.get(Textfield.class, "scaleMaxText").setText( strArj(scaleMax) );
 
   if (ifType == IF_TYPE_ABOVE) {
     cp5.get(Toggle.class, "ifMinusToggle").setValue(0);
@@ -1980,8 +1325,8 @@ void loadConfigPostCreation()
     cp5.get(Toggle.class, "ifPlusToggle").setValue(0);
   }
 
-  cp5.get(Textfield.class, "ifOffset").setText(str(ifOffset));
-  cp5.get(Textfield.class, "cropPrcntTxt").setText(str(cropPercent));
+  cp5.get(Textfield.class, "ifOffset").setText(strArj(ifOffset));
+  cp5.get(Textfield.class, "cropPrcntTxt").setText(strArj(cropPercent));
 
   setScale();
   setRange();
@@ -1992,14 +1337,14 @@ void loadConfigPostCreation()
 void loadConfig() {
   table = loadTable(glb_configFileName, "header");
 
-  startFreq = table.getInt(configurationActive, "startFreq");
-  stopFreq = table.getInt(configurationActive, "stopFreq");
-  if (startFreq >= stopFreq)  stopFreq = startFreq +100000;
-  binStep = table.getInt(configurationActive, "binStep");
+  glb_startFreq = Math.max(table.getLong(configurationActive, "startFreq"), glb_fullRangeMin );
+  glb_stopFreq =  Math.min(table.getLong(configurationActive, "stopFreq"),  glb_fullRangeMax );
+  if (glb_startFreq >= glb_stopFreq)  glb_stopFreq = glb_startFreq +100000;
+  glb_binStep = table.getInt(configurationActive, "binStep");
   scaleMin = table.getInt(configurationActive, "scaleMin");
   scaleMax = table.getInt(configurationActive, "scaleMax");
-  fullRangeMin = table.getInt(configurationActive, "minFreq");
-  fullRangeMax = table.getInt(configurationActive, "maxFreq");
+  // glb_fullRangeMin = table.getInt(configurationActive, "minFreq");
+  // glb_fullRangeMax = table.getInt(configurationActive, "maxFreq");
 
   ifOffset = table.getInt(configurationActive, "ifOffset");
   ifType = table.getInt(configurationActive, "ifType");
@@ -2008,22 +1353,22 @@ void loadConfig() {
   configurationName = table.getString(configurationActive, "configName");
 
   //Protection
-  if (binStep < binStepProtection) binStep = binStepProtection;
+  if (glb_binStep < binStepProtection) glb_binStep = binStepProtection;
   cropPercent = max( min(70, cropPercent ), 0 );	// Just in case....
 
   // Init zoom back
-  zoomBackFreqMin = startFreq;
-  zoomBackFreqMax = stopFreq;
+  glb_zoomBackFreqMin = glb_startFreq;
+  glb_zoomBackFreqMax = glb_stopFreq;
   zoomBackScalMin = scaleMin;
   zoomBackScalMax = scaleMax;
 
   println("loadConfig: Config table " + glb_configFileName + " loaded.");
-  println("startFreq = " + startFreq + " stopFreq = " + stopFreq + " binStep = " + binStep + " scaleMin = " +
-    scaleMin + " scaleMax = ", scaleMax + " rfGain = " + rfGain + " fullRangeMin = " + fullRangeMin + "  fullRangeMax = " + fullRangeMax +
+  println("startFreq = " + glb_startFreq + " stopFreq = " + glb_stopFreq + " binStep = " + glb_binStep + " scaleMin = " +
+    scaleMin + " scaleMax = ", scaleMax + " rfGain = " + rfGain + " fullRangeMin = " + glb_fullRangeMin + "  fullRangeMax = " + glb_fullRangeMax +
     " ifOffset = " + ifOffset + " ifType = " + ifType);
 
   try {
-    cp5.get(Textfield.class, "ifOffset").setText(str(ifOffset));  // Spaghetti because mouse events and code modification events have the same result on event code...
+    cp5.get(Textfield.class, "ifOffset").setText(strArj(ifOffset));  // Spaghetti because mouse events and code modification events have the same result on event code...
   }
   catch (Exception e) {
   }
@@ -2043,22 +1388,22 @@ void saveConfigToIndx( int configIndx ) {
 
     table.setInt(0, "activeConfig", configurationActive);
 
-    table.setInt(configIndx, "startFreq", startFreq);
-    table.setInt(configIndx, "stopFreq", stopFreq);
-    table.setInt(configIndx, "binStep", binStep);
+    table.setLong(configIndx, "startFreq", glb_startFreq);
+    table.setLong(configIndx, "stopFreq", glb_stopFreq);
+    table.setInt(configIndx, "binStep", glb_binStep);
     table.setInt(configIndx, "scaleMin", scaleMin);
     table.setInt(configIndx, "scaleMax", scaleMax);
     table.setInt(configIndx, "rfGain", rfGain);
-    table.setInt(configIndx, "minFreq", fullRangeMin);
-    table.setInt(configIndx, "maxFreq", fullRangeMax);
+    table.setLong(configIndx, "minFreq", glb_fullRangeMin);
+    table.setLong(configIndx, "maxFreq", glb_fullRangeMax);
     table.setInt(configIndx, "ifOffset", ifOffset);
     table.setInt(configIndx, "ifType", ifType);
     table.setInt(configIndx, "cropPrcnt", cropPercent);
 
     saveTable(table, glb_configFileName, "csv");
 
-    println("STORE TO " +  configIndx + " : startFreq = " + startFreq + " stopFreq = " + stopFreq + " binStep = " + binStep + " scaleMin = " +
-      scaleMin + " scaleMax = ", scaleMax + " rfGain = " + rfGain + " fullRangeMin = " + fullRangeMin + "  fullRangeMax = " + fullRangeMax +
+    println("STORE TO " +  configIndx + " : startFreq = " + glb_startFreq + " stopFreq = " + glb_stopFreq + " binStep = " + glb_binStep + " scaleMin = " +
+      scaleMin + " scaleMax = ", scaleMax + " rfGain = " + rfGain + " fullRangeMin = " + glb_fullRangeMin + "  fullRangeMax = " + glb_fullRangeMax +
       " ifOffset = " + ifOffset + " ifType = " + ifType);
     println("Config table " + glb_configFileName + " saved.");
   }
@@ -2111,13 +1456,13 @@ void drawVertCursor() {
   float xBand;
   float xCur;
   float xPlot;
-  xBand = (stopFreq - startFreq);
+  xBand = (glb_stopFreq - glb_startFreq);
 
   int tmpInt;
-  int freqLeft;
-  int freqRight;
-  freqLeft = startFreq + hzPerPixel() * (cursorVerticalLeftX - graphX());
-  freqRight = startFreq + hzPerPixel() * (cursorVerticalRightX - graphX());
+  long glb_freqLeft;
+  long glb_freqRight;
+  glb_freqLeft = glb_startFreq + hzPerPixel() * (cursorVerticalLeftX - graphX());
+  glb_freqRight = glb_startFreq + hzPerPixel() * (cursorVerticalRightX - graphX());
   float scaleBottom;
   float scaleTop;
   scaleBottom = scaleMax - ( ( (cursorHorizontalBottomY - graphY()) * gainPerPixel() ) / 1000.0 );
@@ -2129,14 +1474,14 @@ void drawVertCursor() {
   fill(cursorVerticalLeftX_Color);
   line(cursorVerticalLeftX, graphY(), cursorVerticalLeftX, graphY()+graphHeight());
   textAlign(CENTER);
-  text(numToStr(ifCorrectedFreq(freqLeft) /1000)  + " kHz", cursorVerticalLeftX-10, graphY()  - 5);
+  text(numToStr(ifCorrectedFreq(glb_freqLeft) /1000000)  + " MHz", cursorVerticalLeftX-10, graphY()  - 5);    // TO_CHECK
 
   // RIGHT
   stroke(cursorVerticalRightX_Color);
   fill(cursorVerticalRightX_Color);
   line(cursorVerticalRightX, graphY(), cursorVerticalRightX, graphY()+graphHeight());
   textAlign(CENTER);
-  text(numToStr(ifCorrectedFreq(freqRight)/1000)  + " kHz", cursorVerticalRightX-10, graphY()  - 5);
+  text(numToStr(ifCorrectedFreq(glb_freqRight)/1000000)  + " MHz", cursorVerticalRightX-10, graphY()  - 5);     // TO_CHECK
 
   // BOTTOM
   stroke(cursorHorizontalBottomY_Color);
@@ -2170,7 +1515,7 @@ void drawVertCursor() {
   }
   textAlign(LEFT);
   fill(cursorDeltaColor);
-  text("Δx : " + numToStr((freqRight - freqLeft)/1000)  + " kHz", deltaLabelsX + labelXOffset, deltaLabelsY + labelYOffset );
+  text("Δx : " + numToStr((double)(glb_freqRight - glb_freqLeft)/1000000)  + " MHz", deltaLabelsX + labelXOffset, deltaLabelsY + labelYOffset );	// TO_CHECK
   text("Δy : " + String.format("%.1f", scaleBottom - scaleTop) + " db", deltaLabelsX + labelXOffset, deltaLabelsY + 20 + labelYOffset );
   textSize(12);
   text("VSWR: 1 : " + String.format("%.3f", tmpVSWR), deltaLabelsX + labelXOffset, deltaLabelsY + 38 + labelYOffset );
@@ -2183,14 +1528,19 @@ void drawVertCursor() {
 
 // ====================================================================
 
-String numToStr(int inNum) {
+String numToStr1(int inNum) {
   // Convert number to string with commas
   String outStr = nfc(inNum);
   return outStr;
 }
+String numToStr(double inNum) {
+  // Convert number to string with commas using String.format
+  String outStr = String.format(Locale.US, "%,.3f", inNum);
+  return outStr;
+}
 
-int getGraphXfromFreq( int frequency ) {
-  return max(graphX() -10, min( graphX() + graphWidth() + 10, graphX() + graphWidth()  * (frequency/1000 - startFreq/1000) / (stopFreq/1000 - startFreq/1000)));
+int getGraphXfromFreq( long frequency ) {
+  return (int) max(graphX() -10, min( graphX() + graphWidth() + 10, graphX() + graphWidth()  * (frequency/1000 - glb_startFreq/1000) / (glb_stopFreq/1000 - glb_startFreq/1000))); // TAG_TOCHECK
 }
 
 int getGraphYfromDb( int db ) {
@@ -2255,7 +1605,7 @@ void mousePressed(MouseEvent evnt) {
   }
 
 
-  int clickFreq = startFreq + hzPerPixel() * (thisMouseX - graphX());
+  long clickFreq = glb_startFreq + hzPerPixel() * (thisMouseX - graphX());
   int clickScale;
   clickScale = ( (thisMouseY - graphY()) * gainPerPixel() ) / 1000;
   clickScale = scaleMax - clickScale;
@@ -2290,7 +1640,7 @@ void mousePressed(MouseEvent evnt) {
     if ( abs(mouseY-cursorHorizontalTopY) <= SELECT_THR ) {
       println("TOP LINE");
       println("clickScale: " + clickScale);
-      cp5.get(Textfield.class, "scaleMaxText").setText(str(clickScale));
+      cp5.get(Textfield.class, "scaleMaxText").setText(strArj(clickScale));
       sweepVertical( mouseY - graphY(), #fcd420, 255);
       cursorHorizontalTopY = mouseY;
       movingCursor = CURSORS.CUR_Y_TOP;
@@ -2302,7 +1652,7 @@ void mousePressed(MouseEvent evnt) {
     else if ( abs(mouseY-cursorHorizontalBottomY) <= SELECT_THR ) {
       println("BOTTOM LINE");
       println("clickScale: " + clickScale);
-      cp5.get(Textfield.class, "scaleMinText").setText(str(clickScale));
+      cp5.get(Textfield.class, "scaleMinText").setText(strArj(clickScale));
       sweepVertical( mouseY - graphY(), #fcd420, 255);
       cursorHorizontalBottomY = mouseY;
       movingCursor = CURSORS.CUR_Y_BOTTOM;
@@ -2314,7 +1664,7 @@ void mousePressed(MouseEvent evnt) {
     else if ( abs(mouseX-cursorVerticalLeftX) <= SELECT_THR ) {
       println("LEFT LINE");
       println("clickFreq: " + clickFreq);
-      cp5.get(Textfield.class, "startFreqText").setText(str(clickScale));
+      cp5.get(Textfield.class, "startFreqText").setText(strArj(clickScale));
       sweep( mouseX - graphX(), #fcd420, 255);
       cursorVerticalLeftX = mouseX;
       movingCursor = CURSORS.CUR_X_LEFT;
@@ -2326,7 +1676,7 @@ void mousePressed(MouseEvent evnt) {
     else if ( abs(mouseX-cursorVerticalRightX) <= SELECT_THR ) {
       println("RIGHT LINE");
       println("clickFreq: " + clickFreq);
-      cp5.get(Textfield.class, "stopFreqText").setText(str(clickScale));
+      cp5.get(Textfield.class, "stopFreqText").setText(strArj(clickScale));
       sweep( mouseX - graphX(), #fcd420, 255);
       cursorVerticalRightX = mouseX;
       movingCursor = CURSORS.CUR_X_RIGHT;
@@ -2358,20 +1708,20 @@ void mouseDragged() {
 
   if (movingCursor == CURSORS.CUR_X_LEFT) {
     cursorVerticalLeftX = thisMouseX;
-    int clickFreq = startFreq + hzPerPixel() * (thisMouseX - graphX());
-    cp5.get(Textfield.class, "startFreqText").setText( str(clickFreq) );
+    long clickFreq = glb_startFreq + hzPerPixel() * (thisMouseX - graphX());
+    cp5.get(Textfield.class, "startFreqText").setText( strArj(clickFreq) );
   } else if (movingCursor == CURSORS.CUR_X_RIGHT) {
     cursorVerticalRightX = thisMouseX;
-    int clickFreq = startFreq + hzPerPixel() * (thisMouseX - graphX());
-    cp5.get(Textfield.class, "stopFreqText").setText( str(clickFreq) );
+    long clickFreq = glb_startFreq + hzPerPixel() * (thisMouseX - graphX());
+    cp5.get(Textfield.class, "stopFreqText").setText( strArj(clickFreq) );
   } else if (movingCursor == CURSORS.CUR_Y_TOP) {
     cursorHorizontalTopY = thisMouseY;
     int clickScale = scaleMax - ( ( (thisMouseY - graphY()) * gainPerPixel() ) / 1000 ) ;
-    cp5.get(Textfield.class, "scaleMaxText").setText(str(clickScale));
+    cp5.get(Textfield.class, "scaleMaxText").setText(strArj(clickScale));
   } else if (movingCursor == CURSORS.CUR_Y_BOTTOM) {
     cursorHorizontalBottomY = thisMouseY;
     int clickScale = scaleMax - ( ( (thisMouseY - graphY()) * gainPerPixel() ) / 1000 ) ;
-    cp5.get(Textfield.class, "scaleMinText").setText(str(clickScale));
+    cp5.get(Textfield.class, "scaleMinText").setText(strArj(clickScale));
   }
 
   if (mouseButton == RIGHT) {    // TAG01 RIGHT->LEFT was LEFT
@@ -2396,12 +1746,12 @@ void mouseReleased() {
   if (mouseDragGraph == GRAPH_DRAG_STARTED) {
     mouseDragGraph = GRAPH_DRAG_NONE;
 
-    int deltaF;
+    long deltaF;
     int deltaDB;
-    int freqLeft;
-    int freqRight;
-    freqLeft = startFreq + hzPerPixel() * (dragGraphStartX - graphX());
-    freqRight = startFreq + hzPerPixel() * (mouseX - graphX());
+    long freqLeft;
+    long freqRight;
+    freqLeft = (long)(glb_startFreq + hzPerPixel() * (dragGraphStartX - graphX()));  // TO_CHECK
+    freqRight = (long) (glb_startFreq + hzPerPixel() * (mouseX - graphX()));          // TO_CHECK
     int scaleBottom;
     int scaleTop;
     scaleBottom = scaleMax - ( ( (dragGraphStartY - graphY()) * gainPerPixel() ) / 1000 );
@@ -2416,22 +1766,22 @@ void mouseReleased() {
       scaleMax += deltaDB;
 
       // Protections
-      if (scaleMin < fullScaleMin) {
-        scaleMin = fullScaleMin;
+      if (scaleMin < glb_fullScaleMin) {
+        scaleMin = glb_fullScaleMin;
       }
-      if (scaleMin > fullScaleMax) {
-        scaleMin = fullScaleMin;
+      if (scaleMin > glb_fullScaleMax) {
+        scaleMin = glb_fullScaleMin;
       }
-      if (scaleMax < fullScaleMin) {
-        scaleMax = fullScaleMin;
+      if (scaleMax < glb_fullScaleMin) {
+        scaleMax = glb_fullScaleMin;
       }
-      if (scaleMax > fullScaleMax) {
-        scaleMax = fullScaleMax;
+      if (scaleMax > glb_fullScaleMax) {
+        scaleMax = glb_fullScaleMax;
       }
 
       // Set new scales
-      cp5.get(Textfield.class, "scaleMinText").setText( str(scaleMin) );
-      cp5.get(Textfield.class, "scaleMaxText").setText( str(scaleMax) );
+      cp5.get(Textfield.class, "scaleMinText").setText( strArj(scaleMin) );
+      cp5.get(Textfield.class, "scaleMaxText").setText( strArj(scaleMax) );
 
       setScale();
       println("deltaDB: " + numToStr(deltaDB) + ", -New Scale: \n" + "  LOWER:" + numToStr(scaleMin) + ",  UPPER:" + numToStr(scaleMax) );
@@ -2439,28 +1789,28 @@ void mouseReleased() {
 
     // Move graph right/left
     if (abs(deltaF) > 10) {
-      startFreq -= deltaF;
-      stopFreq -= deltaF;
+      glb_startFreq -= deltaF;
+      glb_stopFreq -= deltaF;
 
       // Protections
-      if (startFreq < fullRangeMin) {
-        startFreq = fullRangeMin;
+      if (glb_startFreq < glb_fullRangeMin) {
+        glb_startFreq = glb_fullRangeMin;
       }
-      if (startFreq > fullRangeMax) {
-        startFreq = fullRangeMax;
+      if (glb_startFreq > glb_fullRangeMax) {
+        glb_startFreq = glb_fullRangeMax;
       }
-      if (stopFreq < fullRangeMin) {
-        stopFreq = fullRangeMin;
+      if (glb_stopFreq < glb_fullRangeMin) {
+        glb_stopFreq = glb_fullRangeMin;
       }
-      if (stopFreq > fullRangeMax) {
-        stopFreq = fullRangeMax;
+      if (glb_stopFreq > glb_fullRangeMax) {
+        glb_stopFreq = glb_fullRangeMax;
       }
 
       // Set new scales
-      cp5.get(Textfield.class, "startFreqText").setText( str(startFreq) );
-      cp5.get(Textfield.class, "stopFreqText").setText( str(stopFreq) );
+      cp5.get(Textfield.class, "startFreqText").setText( strArj(glb_startFreq) );
+      cp5.get(Textfield.class, "stopFreqText").setText( strArj(glb_stopFreq) );
 
-      println("deltaF: " + numToStr(deltaF) + ", -New Freq: \n" + "  START:" + numToStr(startFreq) + ",  STOP:" + numToStr(stopFreq) );
+      println("deltaF: " + numToStr(deltaF) + ", -New Freq: \n" + "  START:" + numToStr(glb_startFreq) + ",  STOP:" + numToStr(glb_stopFreq) );
 
       setRange();
     }
@@ -2478,8 +1828,8 @@ void mouseWheel(MouseEvent event) {
   final int TIME_UNTIL_SET = 25;
   final int TIME_UNTIL_SET_FAST = 10;
 
-  int tmpFreq;
-  int tmpFreq2;
+  long tmpFreq;
+  long tmpFreq2;
   int tmpGain;
   int tmpGain2;
 
@@ -2488,7 +1838,7 @@ void mouseWheel(MouseEvent event) {
   int gMouseY;
   int freqStep = 0;
 
-  int scaleFreqOverDb = 0;
+  long scaleFreqOverDb = 0;
 
   gMouseX = mouseX - graphX();
   gMouseY = mouseY - graphY();
@@ -2534,7 +1884,7 @@ void mouseWheel(MouseEvent event) {
     infoText1X = min( max( graphX() +90, mouseX), graphWidth() + 140 ) ;
     infoText1Y = max( graphY() +40, mouseY );
   }
-  if ( stopFreq - startFreq > 50000000 ) freqStep = 10000000;
+  if ( glb_stopFreq - glb_startFreq > 50000000 ) freqStep = 10000000;
   else freqStep = 1000000;
 
   switch ( toModify ) {
@@ -2543,11 +1893,11 @@ void mouseWheel(MouseEvent event) {
   //
   case  GAIN_LOW:
     tmpGain = (( parseInt(cp5.get(Textfield.class, "scaleMinText").getText()) ) - event.getCount()) ;
-    if (tmpGain < fullScaleMin ) tmpGain = fullScaleMin;
-    if (tmpGain > fullScaleMax ) tmpGain = fullScaleMax-1;
+    if (tmpGain < glb_fullScaleMin ) tmpGain = glb_fullScaleMin;
+    if (tmpGain > glb_fullScaleMax ) tmpGain = glb_fullScaleMax-1;
     if (tmpGain >= scaleMax ) tmpGain = scaleMax - 1;
-    cp5.get(Textfield.class, "scaleMinText").setText(str(tmpGain));
-    infoText = str(tmpGain)  + " db" ;
+    cp5.get(Textfield.class, "scaleMinText").setText(strArj(tmpGain));
+    infoText = strArj(tmpGain)  + " db" ;
     itemToSet = ITEM_GAIN;
     infoLineY = getGraphYfromDb( tmpGain  );
 
@@ -2556,12 +1906,12 @@ void mouseWheel(MouseEvent event) {
 
   case  GAIN_HIGH:
     tmpGain = (( parseInt(cp5.get(Textfield.class, "scaleMaxText").getText()) ) - event.getCount()) ;
-    if (tmpGain < fullScaleMin ) tmpGain = fullScaleMin + 1;
-    if (tmpGain > fullScaleMax ) tmpGain = fullScaleMax;
+    if (tmpGain < glb_fullScaleMin ) tmpGain = glb_fullScaleMin + 1;
+    if (tmpGain > glb_fullScaleMax ) tmpGain = glb_fullScaleMax;
     if (tmpGain <= scaleMin ) tmpGain = scaleMin + 1;
-    cp5.get(Textfield.class, "scaleMaxText").setText(str(tmpGain));
+    cp5.get(Textfield.class, "scaleMaxText").setText(strArj(tmpGain));
     itemToSet = ITEM_GAIN;
-    infoText = str(tmpGain)   + " db" ;
+    infoText = strArj(tmpGain)   + " db" ;
     infoLineY = getGraphYfromDb( tmpGain  );
 
     timeToSet = TIME_UNTIL_SET;
@@ -2571,47 +1921,47 @@ void mouseWheel(MouseEvent event) {
   //
   case  FREQ_LEFT:
     tmpFreq = (( parseInt(cp5.get(Textfield.class, "startFreqText").getText()) /freqStep ) - event.getCount() )  * freqStep ;
-    if (tmpFreq < fullRangeMin ) tmpFreq = fullRangeMin;
-    if (tmpFreq > fullRangeMax ) tmpFreq = fullRangeMax;
-    if (tmpFreq >= stopFreq ) tmpFreq = stopFreq - 1000000;
-    cp5.get(Textfield.class, "startFreqText").setText(str(tmpFreq));
+    if (tmpFreq < glb_fullRangeMin ) tmpFreq = glb_fullRangeMin;
+    if (tmpFreq > glb_fullRangeMax ) tmpFreq = glb_fullRangeMax;
+    if (tmpFreq >= glb_stopFreq ) tmpFreq = glb_stopFreq - 1000000;
+    cp5.get(Textfield.class, "startFreqText").setText(strArj(tmpFreq));
     itemToSet = ITEM_FREQUENCY;
-    infoText = str( ifCorrectedFreq(tmpFreq) / 1000000 )  + " MHz" ;
+    infoText = strArj( ifCorrectedFreq(tmpFreq) / 1000000 )  + " MHz" ;
     infoLineX = getGraphXfromFreq( tmpFreq );
     timeToSet = TIME_UNTIL_SET;
     break;
 
   case  FREQ_RIGHT:
     tmpFreq = (( parseInt(cp5.get(Textfield.class, "stopFreqText").getText()) / freqStep) - event.getCount())  * freqStep;
-    if (tmpFreq < fullRangeMin ) tmpFreq = fullRangeMin;
-    if (tmpFreq > fullRangeMax ) tmpFreq = fullRangeMax;
-    if (tmpFreq <= startFreq ) tmpFreq = startFreq + 1000000;
-    cp5.get(Textfield.class, "stopFreqText").setText(str(tmpFreq));
+    if (tmpFreq < glb_fullRangeMin ) tmpFreq = glb_fullRangeMin;
+    if (tmpFreq > glb_fullRangeMax ) tmpFreq = glb_fullRangeMax;
+    if (tmpFreq <= glb_startFreq ) tmpFreq = glb_startFreq + 1000000;
+    cp5.get(Textfield.class, "stopFreqText").setText(strArj(tmpFreq));
     itemToSet = ITEM_FREQUENCY;
-    infoText = str( ifCorrectedFreq( tmpFreq )/ 1000000 ) + " MHz";
+    infoText = strArj( ifCorrectedFreq( tmpFreq )/ 1000000 ) + " MHz";
     infoLineX = getGraphXfromFreq( tmpFreq );
     timeToSet = TIME_UNTIL_SET;
     break;
 
   case GRAPH_ZOOM:
-    scaleFreqOverDb =  (stopFreq - startFreq) / (scaleMax - scaleMin) ;  // How many Hz for each db
-    tmpGain  = min( max( (( parseInt(cp5.get(Textfield.class, "scaleMinText").getText()) ) - event.getCount()), fullScaleMin), fullScaleMax) ;
-    tmpGain2 = max( min( (( parseInt(cp5.get(Textfield.class, "scaleMaxText").getText()) ) + event.getCount()), fullScaleMax), fullScaleMin) ;
+    scaleFreqOverDb =  (glb_stopFreq - glb_startFreq) / (scaleMax - scaleMin) ;  // How many Hz for each db
+    tmpGain  = min( max( (( parseInt(cp5.get(Textfield.class, "scaleMinText").getText()) ) - event.getCount()), glb_fullScaleMin), glb_fullScaleMax) ;
+    tmpGain2 = max( min( (( parseInt(cp5.get(Textfield.class, "scaleMaxText").getText()) ) + event.getCount()), glb_fullScaleMax), glb_fullScaleMin) ;
     if ( tmpGain2 <= tmpGain ) tmpGain2 = tmpGain + 2;
-    if ( tmpGain == fullScaleMax ) {
-      tmpGain = fullScaleMax-1;
-      tmpGain2=fullScaleMax;
+    if ( tmpGain == glb_fullScaleMax ) {
+      tmpGain = glb_fullScaleMax-1;
+      tmpGain2=glb_fullScaleMax;
     }
-    cp5.get(Textfield.class, "scaleMinText").setText(str(tmpGain));
-    cp5.get(Textfield.class, "scaleMaxText").setText(str(tmpGain2));
+    cp5.get(Textfield.class, "scaleMinText").setText(strArj(tmpGain));
+    cp5.get(Textfield.class, "scaleMaxText").setText(strArj(tmpGain2));
 
-    tmpFreq  =  min( max( parseInt(cp5.get(Textfield.class, "startFreqText").getText()) - scaleFreqOverDb * event.getCount(), fullRangeMin ), fullRangeMax )  ;
-    tmpFreq2 =  max( min( parseInt(cp5.get(Textfield.class, "stopFreqText").getText())  + scaleFreqOverDb * event.getCount(), fullRangeMax ), fullRangeMin )  ;
+    tmpFreq  = (long) min( max( Long.parseLong(cp5.get(Textfield.class, "startFreqText").getText()) - scaleFreqOverDb * event.getCount(), glb_fullRangeMin ), glb_fullRangeMax )  ; // TO_CHECK
+    tmpFreq2 = (long) max( min( Long.parseLong(cp5.get(Textfield.class, "stopFreqText").getText())  + scaleFreqOverDb * event.getCount(), glb_fullRangeMax ), glb_fullRangeMin )  ; // TO_CHECK
 
     if (tmpFreq >= tmpFreq2) tmpFreq2 = tmpFreq + 10000000;
 
-    cp5.get(Textfield.class, "startFreqText").setText(str(tmpFreq));
-    cp5.get(Textfield.class, "stopFreqText").setText(str(tmpFreq2));
+    cp5.get(Textfield.class, "startFreqText").setText(strArj(tmpFreq));
+    cp5.get(Textfield.class, "stopFreqText").setText(strArj(tmpFreq2));
 
     if ( event.getCount() >0 ) infoText = "ZOOM OUT";
     else infoText="ZOOM IN";

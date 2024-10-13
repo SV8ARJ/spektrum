@@ -19,8 +19,8 @@ class RtlspektrumWrapper implements SpektrumInterface {
     }
 
     @Override
-    void setFrequencyRange(int startFreq, int stopFreq, int binStep, double tmpCrop) {
-        rtlSpektrum.setFrequencyRange(startFreq, stopFreq, binStep, tmpCrop);  // Forward call
+    void setFrequencyRange(long startFreq, long stopFreq, int binStep, double tmpCrop) {
+        rtlSpektrum.setFrequencyRange((int)startFreq, (int)stopFreq, binStep, tmpCrop);  // Forward call
     }
 
     @Override
@@ -69,6 +69,9 @@ class RtlspektrumWrapper implements SpektrumInterface {
       return rtlSpektrum.getDevices();
     }
     
+    long[] getFrequencyRangeSupported() {
+        return new long[] {24000000L, 1700000000L};  // Use long literals
+    }
     
     
     

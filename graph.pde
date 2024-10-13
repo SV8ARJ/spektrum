@@ -14,8 +14,8 @@ int graphY() {
   return 25;
 }
 
-int hzPerPixel() {
-  return (stopFreq - startFreq)/graphWidth();
+long hzPerPixel() {
+  return (long) (glb_stopFreq - glb_startFreq)/graphWidth();
 }
 
 int gainPerPixel() {
@@ -43,7 +43,7 @@ void graphDrawFill(int x1, int y1, int x2, int y2, int lineColor, float alpha) {
 }
 
 
-void drawGraphMatt(double minValue, double maxValue, int minFreq, int maxFreq) {
+void drawGraphMatt(double minValue, double maxValue, long minFreq, long maxFreq) {
   // This rtn draws the grid on the screen ======================
   int pixelSpacing = 50;
 
@@ -69,7 +69,7 @@ void drawGraphMatt(double minValue, double maxValue, int minFreq, int maxFreq) {
   for (int i = 0; i<=verticals; i++) {
     line(graphX() + i * verticalSpacing, graphY(), graphX() + i * verticalSpacing, graphY() + graphHeight());
     textAlign(CENTER);  //TODO optimize for efficiency and speed
-    text(   round((float) ifCorrectedFreq( (int) (xPos * 10000) )/10000.0 ) / 100.0 + "", graphX() + i * verticalSpacing, graphY() + graphHeight() + 20);
+    text(   round((float) ifCorrectedFreq( (long) (xPos * 10000) )/10000.0 ) / 100.0 + "", graphX() + i * verticalSpacing, graphY() + graphHeight() + 20);
     xPos += xStep;
   }
 
