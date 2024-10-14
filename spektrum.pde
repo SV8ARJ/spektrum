@@ -22,6 +22,7 @@ import java.io.*;
 
 String glb_WindowTitle = "Spektrum ";
 String glb_ProgramVersion = "v0.20b - SV8ARJ";
+String glb_renderedMode = "";
 
 SpektrumInterface spektrumReader;	// TODO ... I will regret this, why not just use ifs on every call ? It's only 30 or so...
 
@@ -735,14 +736,16 @@ void settings() {
     lastHeight = 750;
 	
 	File file = new File("P3D");		
-	if (file.exists()) 	
-		size(lastWidth, lastHeight, P3D );  // P2D, P3D Size should be the first statement TODO add method to settings file
+	if (file.exists()) 	{
+		size(lastWidth, lastHeight, P3D );   // P2D, P3D Size should be the first statement TODO add method to settings file
+        glb_renderedMode = "P3D";            // used for the title bar
+    }
 	else
-		size(lastWidth, lastHeight );  // P2D, P3D Size should be the first statement TODO add method to settings file
+		size(lastWidth, lastHeight );        // P2D, P3D Size should be the first statement TODO add method to settings file
 }
 
 void setup() {
-	windowTitle( glb_WindowTitle + glb_ProgramVersion );
+	windowTitle( glb_WindowTitle + glb_ProgramVersion + ( glb_renderedMode == "" ? "" : " - P3D " ) );
 	surface.setResizable(true);
 	frameRate(60);  // TODO Add it to settings file
 
@@ -856,9 +859,14 @@ void draw() {
 
   // Mouse Pointer
   //
-  // Hand cursor ?
-  //
-  if (Math.abs( mouseX -  cursorVerticalLeftX ) < 20  ||
+  if ( (movingCursor != CURSORS.CUR_NONE || mouseDragGraph == GRAPH_DRAG_STARTED) ) {
+       if (glb_lastCursor != MOVE ) { cursor(MOVE); glb_lastCursor = MOVE; }      
+  }
+  else if (Math.abs( mouseX - width  ) < 5 &&
+      Math.abs( mouseY - height ) < 5  ) {
+          if (glb_lastCursor != CROSS ) { cursor(CROSS); glb_lastCursor = CROSS; }    
+  }
+  else if(Math.abs( mouseX -  cursorVerticalLeftX ) < 20  ||
       Math.abs( mouseX -  cursorVerticalRightX ) < 20 ||
       Math.abs( mouseY -  cursorHorizontalTopY ) < 20 ||
       Math.abs( mouseY -  cursorHorizontalBottomY ) < 20
@@ -871,26 +879,34 @@ void draw() {
   }
   else
   {
-      if (glb_lastCursor != NORMAL ) { cursor(NORMAL); glb_lastCursor = NORMAL; }
+      if (glb_lastCursor != ARROW ) { cursor(ARROW); glb_lastCursor = ARROW; }
   }
   
   // Tooltips
   //
-  if ( width - mouseX < 30 ) {
+ if ( width - mouseX < 30 ) {
       if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
-      if ( glb_tooltipCounter >1 ) showTooltip( mouseX - 150, mouseY,"Use mouse wheel\n to change upper frequency");
-  }
-  else if ( height - mouseY < 30 ) {
-      if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
-      if ( glb_tooltipCounter >1 ) showTooltip( mouseX - 150, mouseY - 60,"Use mouse wheel\n to change lower db limit");   
-  }
-  else if ( mouseY < 30 ) {
-      if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
-      if ( glb_tooltipCounter >1 ) showTooltip( mouseX - 150, mouseY + 20,"Use mouse wheel\n to change upper db limit");   
+      if ( glb_tooltipCounter >1 ) showTooltip( mouseX - 150, mouseY," Use mouse wheel\n to change upper frequency");
   }
   else if ( Math.abs(graphX() - mouseX) < 30 ) {
       if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
-      if ( glb_tooltipCounter >1 ) showTooltip( mouseX , mouseY ,"Use mouse wheel\n to change lower frequency");
+      if ( glb_tooltipCounter >1 ) showTooltip( mouseX , mouseY ," Use mouse wheel\n to change lower frequency");
+  }
+  else if ( height - mouseY < 30 ) {
+      if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
+      if ( glb_tooltipCounter >1 ) showTooltip( mouseX - 150, mouseY - 60," Use mouse wheel\n to change lower db limit");   
+  }
+  else if ( mouseY < 30 ) {
+      if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
+      if ( glb_tooltipCounter >1 ) showTooltip( mouseX - 150, mouseY + 20," Use mouse wheel\n to change upper db limit");   
+  }
+
+  else if ( mouseX >  cursorVerticalLeftX + 20 &&
+          mouseX <  cursorVerticalRightX - 20 &&
+          mouseY >  cursorHorizontalTopY + 20 &&
+          mouseY <  cursorHorizontalBottomY -20 ) {
+      if ( glb_tooltipCounter == 0 ) glb_tooltipCounter = TOOLTIP_TIME;
+      if ( glb_tooltipCounter >1 ) showTooltip( mouseX, mouseY,"Double Click to zoom in \narea between cursors.");
   }
   else
   {

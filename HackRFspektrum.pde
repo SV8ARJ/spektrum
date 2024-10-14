@@ -120,7 +120,11 @@ class HackRFspektrum implements SpektrumInterface {
 		glb_cmdFrequencyRange = "-f " + startFreq/1000000 + ":" + stopFreq/1000000 ;
     glb_cmdBinSize = " -w " + tmpBinStep;
 		
-    windowTitle( glb_WindowTitle + glb_ProgramVersion + " -  (" + strArj(startFreq/1000000) + " MHz ->" + strArj(stopFreq/1000000) + " Mhz, B:" + strArj(tmpBinStep) + " Hz )");  // TODO does not belong here. move it to UI logic
+    windowTitle( glb_WindowTitle + glb_ProgramVersion +        // TODO Move it to a proper place. 
+        ( glb_renderedMode == "" ? "" : " - P3D " ) +
+        " -  (" + strArj(startFreq/1000000) + " MHz ->" + 
+        strArj(stopFreq/1000000) + " Mhz, B:" + 
+        strArj(tmpBinStep) + " Hz )");  // TODO does not belong here. move it to UI logic
     println("Setting frequency range : Command: " +  glb_cmdFrequencyRange);
   }
 	
@@ -210,7 +214,7 @@ class HackRFspektrum implements SpektrumInterface {
 			
 			// Use ProcessBuilder to run the command
 			ProcessBuilder pb = new ProcessBuilder(tmpCommand.split(" "));
-			pb.redirectErrorStream(true);  // Redirect stderr to stdout so we can capture both
+			pb.redirectErrorStream(false);  // Redirect stderr to stdout ? No as the header and footer are produced there by sweep
 			
 			// Start the process
 			Process process = pb.start();
@@ -245,7 +249,9 @@ class HackRFspektrum implements SpektrumInterface {
 	
 	@Override
 	double[] getDbmBuffer() {
-
+    double tmpFreqMax = 0;
+    double tmpFreqMin = 100000000000L;
+    
 		if (local_SweepRunningState == 2) {
 			// println("getDbmBuffer Called with sweep finished");
 			local_SweepRunningState = 0; // Free thread execution for next scan and hurry up to parse the data from outputLines2
@@ -257,22 +263,31 @@ class HackRFspektrum implements SpektrumInterface {
 			for (String line : outputLines2) {
 				// Split the line into parts using a comma as the delimiter
 				String[] fields = line.split(",");
-
+         // println("LINE : Length : " + fields.length + "\n  " + line  );
+        
 				// Ensure we have at least the expected number of fields
-				if (fields.length >= 7) {
+				if (fields.length >= 6) {    // TODO detect valid lines properly.
 					// Parse the first six fields into the corresponding variables
 					///////// String line_timestamp1 = fields[0].trim();  // First part of the timestamp (date)
 					///////// String line_timestamp2 = fields[1].trim();  // Second part of the timestamp (time)
-					///////// double line_startFreq = Double.parseDouble(fields[2].trim()); // Start frequency
-					///////// double line_endFreq = Double.parseDouble(fields[3].trim());   // End frequency
+					double line_startFreq = Double.parseDouble(fields[2].trim()); // Start frequency
+					double line_endFreq = Double.parseDouble(fields[3].trim());   // End frequency
 					///////// double line_binWidth = Double.parseDouble(fields[4].trim());  // Bin width (frequency resolution)
 					///////// int line_samples = Integer.parseInt(fields[5].trim());        // Number of samples
-
+      
+                  // Save Minimum and maximum frequency
+                  //
+                  tmpFreqMin = Math.min( line_startFreq, tmpFreqMin  );
+                  tmpFreqMax = Math.max( line_endFreq , tmpFreqMax);
+                  // if (line_startFreq < 0 )   
+                  //     println( "Frequency range : " + tmpFreqMin + " - " + tmpFreqMax + " : " + line);
+      
 					// Now parse the rest of the fields (dBm values) into the line_dbm array
 					double[] line_dbm = new double[fields.length - 6];
 					for (int i = 6; i < fields.length; i++) {
-						line_dbm[i - 6] = Double.parseDouble(fields[i].trim());
-						allDbmValues.add(line_dbm[i - 6]);  // Add each dBm value to the overall list
+						// print(fields[i].trim()  +", ");
+                        line_dbm[i - 6] = Double.parseDouble(fields[i].trim());
+  						allDbmValues.add(line_dbm[i - 6]);  // Add each dBm value to the overall list
 					}
 
 					// // Print out the parsed values
@@ -292,7 +307,8 @@ class HackRFspektrum implements SpektrumInterface {
 
 				}
 			}	// all lines loop
-
+            println( "Frequency range : " + tmpFreqMin + " - " + tmpFreqMax );
+            
 			// Convert the ArrayList to a double[] array for returning
 			dbmBuffer = new double[allDbmValues.size()];
 			for (int i = 0; i < allDbmValues.size(); i++) {
