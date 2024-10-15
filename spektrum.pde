@@ -423,6 +423,34 @@ public void rfGain04(int gainValue) {
   cp5.get(Knob.class, "rfGain").setValue(gains[gains.length - 1]);
 }
 
+// bin sizes
+//
+public void binSize00(int gainValue) {
+  cp5.get(Textfield.class, "binStepText").setText("2500");
+  setRange();
+}
+
+public void binSize01(int gainValue) {
+  cp5.get(Textfield.class, "binStepText").setText("5000");
+  setRange();
+}
+public void binSize02(int gainValue) {
+  cp5.get(Textfield.class, "binStepText").setText("10000");
+  setRange();
+}
+public void binSize03(int gainValue) {
+  cp5.get(Textfield.class, "binStepText").setText("50000");
+  setRange();
+}
+public void binSize04(int gainValue) {
+  cp5.get(Textfield.class, "binStepText").setText("100000");
+  setRange();
+}
+public void binSize05(int gainValue) {
+  cp5.get(Textfield.class, "binStepText").setText("250000");
+  setRange();
+}
+
 // IF settings UI
 //
 public void ifPlusToggle(int theValue) {

@@ -95,7 +95,26 @@ void setupControls() {
 
   cp5.addButton("setRangeButton").setValue(0).setPosition(95, y).setSize(width / 2, 20).setColorBackground(buttonColor).setColorLabel(buttonColorText).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("Set range");
 
+  // y += 10;
+  
+  
+  
+  
+  
+  // -------------------------------------------------------------------- Preset ranges
+  //
+  y += 20;
+
+  cp5.addButton("binSize00").setPosition(x, y ).setSize(9, 15).setColorLabel(buttonColorText).setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("");
+  cp5.addButton("binSize01").setPosition(x + 10, y ).setSize(9, 15).setColorLabel(buttonColorText).setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("");
+  cp5.addButton("binSize02").setPosition(x + 20, y ).setSize(9, 15).setColorLabel(buttonColorText).setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("");
+  cp5.addButton("binSize03").setPosition(x + 30, y ).setSize(9, 15).setColorLabel(buttonColorText).setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("");
+  cp5.addButton("binSize04").setPosition(x + 40, y ).setSize(9, 15).setColorLabel(buttonColorText).setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("");
+  cp5.addButton("binSize05").setPosition(x + 50, y ).setSize(9, 15).setColorLabel(buttonColorText).setColorBackground(buttonColor).getCaptionLabel().align(ControlP5.CENTER, ControlP5.CENTER).setText("");
+
+
   y += 10;
+  
 
   uiLines[uiNextLineIndex++][TAB_GENERAL] = y;
 
