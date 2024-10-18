@@ -21,6 +21,9 @@ class RtlspektrumWrapper implements SpektrumInterface {
   @Override
   void setFrequencyRange(long startFreq, long stopFreq, int binStep, double tmpCrop) {
     rtlSpektrum.setFrequencyRange((int) startFreq, (int) stopFreq, binStep, tmpCrop); // Forward call
+    glb_startFreqCorrected = startFreq ;     // Only applies to hackRF so for RTL is just dump
+    glb_stopFreqCorrected = stopFreq ;
+    glb_binStepCorrected = binStep ;
   }
 
   @Override

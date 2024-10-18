@@ -99,48 +99,37 @@ class HackRFspektrum implements SpektrumInterface {
     tmpBinStep = Math.min(tmpBinStep, 5000000);
     tmpBinStep = Math.max(tmpBinStep, 2445);
 
-    try {
-      cp5.get(Textfield.class, "binStepText").setText(String.valueOf(tmpBinStep));
-      cp5.get(Textfield.class, "startFreqText").setText(strArj((startFreq / 1000000) * 1000000));
-      cp5.get(Textfield.class, "stopFreqText").setText(strArj((stopFreq / 1000000) * 1000000));
-      glb_startFreq = (startFreq / 1000000) * 1000000;
-      glb_stopFreq = (stopFreq / 1000000) * 1000000;
-    }
-    catch(Exception e) {
-      println("setRange exception.");
-    }
-
+    // try {
+    //   cp5.get(Textfield.class, "binStepText").setText(String.valueOf(tmpBinStep));
+    //   cp5.get(Textfield.class, "startFreqText").setText(strArj((startFreq / 1000000) * 1000000));
+    //   cp5.get(Textfield.class, "stopFreqText").setText(strArj((stopFreq / 1000000) * 1000000));
+    //   glb_startFreq = (startFreq / 1000000) * 1000000;
+    //   glb_stopFreq = (stopFreq / 1000000) * 1000000;
+    // }
+    // catch(Exception e) {
+    //   println("setRange exception.");
+    // }
+    glb_startFreqCorrected =  startFreq ;
+    glb_stopFreqCorrected =  stopFreq ; 
+    glb_binStepCorrected = tmpBinStep ;
+    
     glb_cmdFrequencyRange = "-f " + startFreq / 1000000 + ":" + stopFreq / 1000000;
     glb_cmdBinSize = " -w " + tmpBinStep;
 
-    windowTitle(glb_WindowTitle + glb_ProgramVersion + // TODO Move it to a proper place. 
-    (glb_renderedMode == "" ? "": " - P3D ") + 
-    " --  " + strArj(startFreq / 1000000) + " MHz ->" + 
-    strArj(stopFreq / 1000000) + " Mhz " +
-    " (" + ( stopFreq - startFreq ) / 1000000 +" MHz) " + 
-    "B:" + strArj(tmpBinStep) + " Hz ");                     // TODO does not belong here. move it to UI logic
-    println("Setting frequency range : Command: " + glb_cmdFrequencyRange);
+
   }
 
   @Override
   int[] getGains() {
     return new int[] {
-      1,
-      2,
-      3,
-      4,
-      5
+      1, 2, 3, 4, 5
     }; // [-l gain_db] # RX LNA (IF) gain, 0-40dB, 8dB steps
   }
 
   @Override
   void setGain(int gainValue) {
     int[] tmpLnaGainLookup = new int[] {
-      8,
-      16,
-      24,
-      32,
-      40
+      8, 16, 24, 32, 40
     };
     glb_cmdLnaGain = "-l " + String.valueOf(tmpLnaGainLookup[gainValue - 1]);
     println("Setting gain CMD to : " + glb_cmdLnaGain);
@@ -246,10 +235,11 @@ class HackRFspektrum implements SpektrumInterface {
   double[] getDbmBuffer() {
     double tmpFreqMax = 0;
     double tmpFreqMin = 100000000000L;
+    double tmpBinStep = 10;
 
     if (local_SweepRunningState == 2) {
       // println("getDbmBuffer Called with sweep finished");
-      local_SweepRunningState = 0; // Free thread execution for next scan and hurry up to parse the data from outputLines2
+      // TODO FASTER ? Protect properly local_SweepRunningState = 0; // Free thread execution for next scan and hurry up to parse the data from outputLines2
       // Prepare a list to store all the parsed dBm values
       ArrayList < Double > allDbmValues = new ArrayList < Double > ();
 
@@ -265,13 +255,14 @@ class HackRFspektrum implements SpektrumInterface {
           ///////// String line_timestamp2 = fields[1].trim();  // Second part of the timestamp (time)
           double line_startFreq = Double.parseDouble(fields[2].trim()); // Start frequency
           double line_endFreq = Double.parseDouble(fields[3].trim()); // End frequency
-          ///////// double line_binWidth = Double.parseDouble(fields[4].trim());  // Bin width (frequency resolution)
+          double line_binWidth = Double.parseDouble(fields[4].trim());  // Bin width (frequency resolution)
           ///////// int line_samples = Integer.parseInt(fields[5].trim());        // Number of samples
           
           // Save Minimum and maximum frequency
           //
           tmpFreqMin = Math.min(line_startFreq, tmpFreqMin);
           tmpFreqMax = Math.max(line_endFreq, tmpFreqMax);
+          tmpBinStep = line_binWidth;
 
           // Now parse the rest of the fields (dBm values) into the line_dbm array
           double[] line_dbm = new double[fields.length - 6];
@@ -296,13 +287,20 @@ class HackRFspektrum implements SpektrumInterface {
           // println("dBm values: " + join(nf(line_dbm_float, 0, 2), ", "));
         }
       } // all lines loop
-      // println("Frequency range : " + tmpFreqMin + " - " + tmpFreqMax);
+      println("Frequency range : " + strArj( tmpFreqMin )+ " - " + strArj( tmpFreqMax) + " : " + tmpBinStep );
+      
+      glb_startFreqCorrected = (long) tmpFreqMin ;      // Hanlde in UI draw loop  
+      glb_stopFreqCorrected = (long) tmpFreqMax ;
+      glb_binStepCorrected = (int) tmpBinStep ; 
+      
+      // setCorrectFrequencyRange( tmpFreqMin, tmpFreqMax );
 
       // Convert the ArrayList to a double[] array for returning
       dbmBuffer = new double[allDbmValues.size()];
       for (int i = 0; i < allDbmValues.size(); i++) {
         dbmBuffer[i] = allDbmValues.get(i);
       }
+      local_SweepRunningState = 0;  // TODO move up for faster but protect overlaping
     }
 
     return this.dbmBuffer; // Return the internal buffer

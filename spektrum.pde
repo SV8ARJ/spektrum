@@ -156,9 +156,12 @@ long glb_fullRangeMin = 24000000;
 long glb_fullRangeMax = 1800000000;
 int glb_fullScaleMin = -110;
 int glb_fullScaleMax = 40;
-
+int glb_correctFrequencyTimer = 0;    // Correct frequency after setFrequency if needed (if SDR produced different results)
 long glb_startFreq = 88000000;
 long glb_stopFreq = 108000000;
+long glb_startFreqCorrected = 88000000;    // HackRF is not always producing requested range. Fix the UI.
+long glb_stopFreqCorrected = 108000000;
+int glb_binStepCorrected = 1000;  // Used for correction
 int glb_binStep = 1000;
 int binStepProtection = 200;
 long vertCursorFreq = 88000000;
@@ -427,28 +430,28 @@ public void rfGain04(int gainValue) {
 //
 public void binSize00(int gainValue) {
   cp5.get(Textfield.class, "binStepText").setText("2500");
-  setRange();
+  setRangeFromTextFields();
 }
 
 public void binSize01(int gainValue) {
   cp5.get(Textfield.class, "binStepText").setText("5000");
-  setRange();
+  setRangeFromTextFields();
 }
 public void binSize02(int gainValue) {
   cp5.get(Textfield.class, "binStepText").setText("10000");
-  setRange();
+  setRangeFromTextFields();
 }
 public void binSize03(int gainValue) {
   cp5.get(Textfield.class, "binStepText").setText("50000");
-  setRange();
+  setRangeFromTextFields();
 }
 public void binSize04(int gainValue) {
   cp5.get(Textfield.class, "binStepText").setText("100000");
-  setRange();
+  setRangeFromTextFields();
 }
 public void binSize05(int gainValue) {
   cp5.get(Textfield.class, "binStepText").setText("250000");
-  setRange();
+  setRangeFromTextFields();
 }
 
 // IF settings UI
@@ -552,10 +555,10 @@ public double ifCorrectedFreq(long inFreq) {
 }
 
 public void setRangeButton() {
-  setRange();
+  setRangeFromTextFields();
 }
 
-public void setRange() {
+public void setRangeFromTextFields() {
   // Button color indicating change
   cp5.get(Button.class, "setRangeButton").setColorBackground(buttonColor);
 
@@ -582,6 +585,9 @@ public void setRange() {
   spektrumReader.setFrequencyRange(glb_startFreq, glb_stopFreq, glb_binStep, tmpCrop);
   spektrumReader.startAutoScan();
   println("setRange: CROP set to " + tmpCrop);
+  
+  glb_correctFrequencyTimer = 200;
+  
 }
 
 public void setScale() {
@@ -663,7 +669,7 @@ void zoomBack() {
   zoomBackScalMax = scaleMax;
 
   setScale();
-  setRange();
+  setRangeFromTextFields();
 }
 
 void zoomIn() {
@@ -680,7 +686,7 @@ void zoomIn() {
   cp5.get(Textfield.class, "scaleMaxText").setText(strArj(scaleMax - (((cursorHorizontalTopY - graphY()) * gainPerPixel()) / 1000)));
 
   setScale();
-  setRange();
+  setRangeFromTextFields();
 }
 
 public void toggleRelMode(int theValue) {
@@ -848,6 +854,14 @@ void draw() {
 
   double[] buffer = spektrumReader.getDbmBuffer();
 
+  // Adapt corrected frequency of needed
+  //
+  if ( glb_correctFrequencyTimer != 0 ){
+      glb_correctFrequencyTimer--;
+      if ( glb_correctFrequencyTimer == 1 ) setCorrectFrequencyRange();
+  }
+  
+  
   minValue = Double.POSITIVE_INFINITY;
   minScaledValue = Double.POSITIVE_INFINITY;
 
@@ -1109,7 +1123,7 @@ void draw() {
         }
       }
     }
-
+    
     lastPoint = point;
     refLastPoint = refPoint;
     avgLastPoint = avgPoint;
@@ -1177,11 +1191,11 @@ void draw() {
     }
   } else if (timeToSet == 1) {
     timeToSet = 0;
-    if (itemToSet == ITEM_FREQUENCY) setRange();
+    if (itemToSet == ITEM_FREQUENCY) setRangeFromTextFields();
     if (itemToSet == ITEM_GAIN) setScale();
     if (itemToSet == ITEM_ZOOM) {
       setScale();
-      setRange();
+      setRangeFromTextFields();
     }
 
     infoText1X = 0;
@@ -1302,13 +1316,13 @@ void exitProgram() {
 public void resetMin() {
   //Set the start freq at full range
   cp5.get(Textfield.class, "startFreqText").setText(strArj(glb_fullRangeMin));
-  setRange();
+  setRangeFromTextFields();
 }
 
 void resetMax() {
   //Set the stop freq full range
   cp5.get(Textfield.class, "stopFreqText").setText(strArj(glb_fullRangeMax));
-  setRange();
+  setRangeFromTextFields();
 }
 
 void loadConfigPostCreation() {
@@ -1332,7 +1346,7 @@ void loadConfigPostCreation() {
   cp5.get(Textfield.class, "cropPrcntTxt").setText(strArj(cropPercent));
 
   setScale();
-  setRange();
+  setRangeFromTextFields();
 
   configurationSaveDelay = 0;
 }
@@ -1805,7 +1819,7 @@ void mouseReleased() {
 
       println("deltaF: " + numToStr(deltaF) + ", -New Freq: \n" + "  START:" + numToStr(glb_startFreq) + ",  STOP:" + numToStr(glb_stopFreq));
 
-      setRange();
+      setRangeFromTextFields();
     }
   }
 }

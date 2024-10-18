@@ -1,3 +1,6 @@
+// Auxilliary Functions - Move them when finished development
+//
+
 // Generic functions
 //
 String strArj(int num) {
@@ -13,6 +16,37 @@ String strArj(double num) {
   return String.format("%.0f", num); // Format double with no decimal places
 }
 
+// After a Hackrf scan the frequency range achieved may be different from requesed. Adjust it according to obtained results
+//
+void setCorrectFrequencyRange ( ) {
+    
+    if (glb_startFreq != glb_startFreqCorrected || glb_stopFreq != glb_stopFreqCorrected  || glb_binStep != glb_binStepCorrected) {
+        try {
+          cp5.get(Textfield.class, "binStepText").setText(String.valueOf(glb_binStepCorrected));
+          cp5.get(Textfield.class, "startFreqText").setText(strArj(glb_startFreqCorrected ));
+          cp5.get(Textfield.class, "stopFreqText").setText(strArj(glb_stopFreqCorrected  ));
+          glb_startFreq =  glb_startFreqCorrected ;
+          glb_stopFreq =  glb_stopFreqCorrected;
+          glb_binStepCorrected = glb_binStep;
+          // setRangeFromTextFields();
+          println("setCorrectFrequencyRange : Coorecting text fields to "  + glb_startFreq + " -> " + glb_stopFreq );
+        }
+        catch(Exception e) {
+          println("setRange exception.");
+        }
+    
+    }
+
+    windowTitle(glb_WindowTitle + glb_ProgramVersion + // TODO Move it to a proper place. 
+      (glb_renderedMode == "" ? "": " - P3D ") + 
+      " --  " + strArj(glb_startFreqCorrected / 1000000) + " MHz ->" + 
+      strArj(glb_stopFreqCorrected / 1000000) + " Mhz " +
+      " (" + ( glb_stopFreqCorrected - glb_startFreqCorrected ) / 1000000 +" MHz) " + 
+      "B:" + strArj(glb_binStepCorrected) + " Hz ");                     // TODO does not belong here. move it to UI logic
+    println("Setting frequency range : Command: " + glb_cmdFrequencyRange);
+    
+}
+
 // Function to display tooltip-like items
 //
 void showTooltip(int x, int y, String text) {
@@ -21,7 +55,7 @@ void showTooltip(int x, int y, String text) {
   int lineCount = lines.length; // Number of lines
   float lineHeight = 20; // Height of each line
   float tooltipWidth = 0;
-
+  
   // Find the maximum text width (longest line)
   for (String line: lines) {
     tooltipWidth = max(tooltipWidth, textWidth(line));
